@@ -2,8 +2,6 @@
 
 A full-stack personal finance management application for tracking investments, mutual funds, loans, SIPs, and expenses. Features statement import from broker and CAMS/CAS PDFs, a tamper-evident audit ledger, optional client-side data encryption via a personal vault, encrypted backup/restore, and an **offline-first local vault mode** that keeps all data in an AES-256-GCM encrypted file on your device — no account or server required.
 
-**Live application:** https://finora-financetracker.up.railway.app/
-
 ---
 
 ## Screenshots
