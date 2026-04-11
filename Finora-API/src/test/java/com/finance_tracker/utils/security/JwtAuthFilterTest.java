@@ -3,6 +3,7 @@ package com.finance_tracker.utils.security;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,8 +33,13 @@ class JwtAuthFilterTest {
     @InjectMocks
     private JwtAuthFilter filter;
 
-    @AfterEach
+    @BeforeEach
     void clearContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    @AfterEach
+    void cleanup() {
         SecurityContextHolder.clearContext();
     }
 
@@ -78,6 +84,8 @@ class JwtAuthFilterTest {
         filter.doFilterInternal(request, response, chain);
 
         verify(chain).doFilter(request, response);
+        verify(jwtService).isTokenValid("bad.token");
+        verify(jwtService, never()).extractUsername("bad.token");
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
