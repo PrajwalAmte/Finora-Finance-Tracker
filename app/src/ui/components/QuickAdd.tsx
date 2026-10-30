@@ -45,8 +45,8 @@ export const QuickAdd: React.FC = () => {
 
   return (
     <div>
-      <form onSubmit={e => { e.preventDefault(); commit(); }} className="flex items-center gap-2 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 pl-4 pr-1.5 h-14 shadow-sm">
-        <Sparkles size={18} className="text-primary-500 shrink-0" />
+      <form onSubmit={e => { e.preventDefault(); commit(); }} className="surface flex items-center gap-3 rounded-[22px] pl-4 pr-2 h-[60px] animate-rise focus-within:ring-2 focus-within:ring-primary-400/60">
+        <span className="h-8 w-8 shrink-0 rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-500/15 dark:text-primary-300 flex items-center justify-center"><Sparkles size={16} /></span>
         <input
           value={text} onChange={e => setText(e.target.value)} enterKeyHint="done"
           placeholder="200 chai upi yesterday"
@@ -54,13 +54,13 @@ export const QuickAdd: React.FC = () => {
           aria-label="Quick add an expense"
         />
         {text ? (
-          <button type="submit" aria-label="Add" className="h-10 w-10 rounded-xl bg-primary-600 text-white flex items-center justify-center"><ArrowUp size={20} /></button>
+          <button type="submit" aria-label="Add" className="pressable h-11 w-11 rounded-2xl bg-primary-600 dark:bg-primary-500 text-white flex items-center justify-center animate-pop-in"><ArrowUp size={20} strokeWidth={2.5} /></button>
         ) : capabilities().scan && (
-          <button type="button" aria-label="Scan a payment screenshot" onClick={() => setScan(true)} className="h-10 w-10 rounded-xl text-neutral-500 flex items-center justify-center"><Camera size={20} /></button>
+          <button type="button" aria-label="Scan a payment screenshot" onClick={() => setScan(true)} className="pressable h-11 w-11 rounded-2xl text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06] flex items-center justify-center"><Camera size={20} /></button>
         )}
       </form>
       {parsed && (
-        <button onClick={() => setSheet({ ...parsed, category: suggestion?.category, source: 'QUICK_ADD' })} className="mt-2 w-full text-left px-4 text-xs text-neutral-500 flex flex-wrap gap-x-2">
+        <button onClick={() => setSheet({ ...parsed, category: suggestion?.category, source: 'QUICK_ADD' })} className="mt-2 w-full text-left px-4 text-xs text-neutral-500 dark:text-neutral-400 flex flex-wrap gap-x-2 animate-fade-in">
           <span className={parsed.kind === 'INCOME' ? 'text-success-600' : ''}>{parsed.kind === 'INCOME' ? 'Income' : 'Expense'}</span>
           <span>·</span><span className="font-medium text-neutral-700 dark:text-neutral-300">{parsed.amount ? inr(parsed.amount) : 'no amount yet'}</span>
           {parsed.description && <><span>·</span><span>{parsed.description}</span></>}

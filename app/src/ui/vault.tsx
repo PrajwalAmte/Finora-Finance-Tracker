@@ -8,6 +8,7 @@ import { upsertMany } from '../domain/records';
 import type { VaultData } from '../domain/types';
 import { onAppState, onAppUrl, requestPersistentStorage, scheduleReminders, setScreenProtection } from '../platform/device';
 import { acceptCaptureUrl } from '../capture/inbox';
+import { attachCloud, detachCloud, handleOAuthReturn } from './cloud';
 import { session } from '../vault/session';
 import { VaultStore } from '../vault/store';
 import { applyTheme } from './theme';
@@ -54,10 +55,12 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   storeRef.current = store;
 
   useEffect(() => {
-    applyTheme('system');
+    applyTheme('dark');
     setScreenProtection(true);
     session.onSaveError = e => toast.error(`Could not save: ${(e as Error).message}`);
     session.hasVault().then(has => setPhase(has ? 'locked' : 'new'));
+    // Coming back from Google/Dropbox sign-in: finish it now; the link is saved once the vault opens.
+    void handleOAuthReturn();
     // Listen before unlock so a message that cold-starts the app waits in memory until the vault opens.
     return onAppUrl(url => { acceptCaptureUrl(url); });
   }, []);
@@ -74,18 +77,21 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     remind(result.data);
     // Web: ask the browser to keep the vault even under storage pressure.
     requestPersistentStorage();
+    void attachCloud(s);
     const msg = describe(result.report);
     if (msg) setTimeout(() => toast.info(msg), 600);
   }, []);
 
   const lock = useCallback(async () => {
+    detachCloud();
     await session.lock();
     setStore(null);
     setPhase('locked');
-    applyTheme('system');
+    applyTheme('dark');
   }, []);
 
   const reset = useCallback(async () => {
+    detachCloud();
     await session.erase();
     setStore(null);
     setPhase('new');

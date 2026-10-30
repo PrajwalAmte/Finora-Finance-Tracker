@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileUp, LineChart, Plus, Receipt, RefreshCw, Repeat } from 'lucide-react';
 import { Button } from '../components/Button';
 import { PieChart } from '../components/PieChart';
-import { Empty, IconButton, List, Money, Panel, PrivacyToggle, Row, Screen, Section, Stat, usePrivacy } from '../components/kit';
+import { HeroCard, Empty, IconButton, List, Money, Panel, PrivacyToggle, Row, Screen, Section, Stat, usePrivacy } from '../components/kit';
 import { HoldingSheet } from '../components/HoldingSheet';
 import { SipSheet } from '../components/SipSheet';
 import { useData, usePositions, useStore } from '../vault';
@@ -17,6 +17,7 @@ import { toast } from '../toast';
 import { OwnerChips, useOwner } from '../owner';
 import { daysBetween, stampDate, today } from '../../domain/dates';
 import { TYPE_LABEL } from '../labels';
+import { assetVisual, calendarVisual, rowIcon } from '../visuals';
 
 
 export default function InvestPage() {
@@ -80,9 +81,9 @@ export default function InvestPage() {
         />
       ) : (
         <>
-          <Panel className="p-4">
-            <div className="text-xs text-neutral-500">Current value</div>
-            <div className="text-3xl font-bold"><Money value={summary.value} /></div>
+          <HeroCard>
+            <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">Current value</div>
+            <div className="font-display text-[36px] leading-tight font-extrabold tracking-[-0.03em] mt-1"><Money value={summary.value} /></div>
             <div className="grid grid-cols-3 gap-3 mt-3">
               <Stat label="Invested" value={<Money value={summary.invested} short />} />
               <Stat label="Gain" value={<Money value={summary.unrealized} short signed className={tone(summary.unrealized)} />} sub={<span className={tone(summary.unrealized)}>{pct(summary.unrealizedPct)}</span>} />
@@ -90,9 +91,9 @@ export default function InvestPage() {
             </div>
             <div className="grid grid-cols-2 gap-2 mt-4">
               <Button variant="secondary" size="sm" iconLeft={<FileUp size={16} />} onClick={() => navigate('/invest/import')}>Import</Button>
-              <Button variant="secondary" size="sm" iconLeft={<Receipt size={16} />} onClick={() => navigate('/invest/tax')}>Tax & harvesting</Button>
+              <Button variant="secondary" size="sm" iconLeft={<Receipt size={16} />} onClick={() => navigate('/invest/tax')}>Tax</Button>
             </div>
-          </Panel>
+          </HeroCard>
 
           {groups.length > 1 && (
             <Panel className="p-4">
@@ -106,6 +107,7 @@ export default function InvestPage() {
                 {list.map(p => (
                   <Row
                     key={p.holding.id}
+                    {...rowIcon(assetVisual(p.holding.type))}
                     onClick={() => navigate(`/invest/${p.holding.id}`)}
                     title={p.holding.name}
                     subtitle={[p.hasEstimated && 'includes estimated SIPs', p.holding.folio && `Folio ${p.holding.folio}`, `XIRR ${xirrPct(p.xirr)}`].filter(Boolean).join(' · ')}
@@ -128,7 +130,7 @@ export default function InvestPage() {
               const next = nextInstallment(s);
               return (
                 <Row
-                  key={s.id} onClick={() => setSipSheet({ sip: s })} title={s.name}
+                  key={s.id} onClick={() => setSipSheet({ sip: s })} {...rowIcon(calendarVisual('SIP'))} title={s.name}
                   subtitle={s.status !== 'ACTIVE' ? s.status.toLowerCase() : next ? `Next ${day(next, 'dd MMM')}${s.autoRecord ? ' · auto' : ''}` : 'Ended'}
                   trailing={<Money value={s.amount} />}
                   trailingSub={<span className="text-neutral-500"><Money value={sipInvested(s, data.txns)} short /> so far</span>}

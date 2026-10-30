@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Copy, FileUp, Fingerprint, KeyRound, Lock, ShieldCheck, Sparkles, WifiOff } from 'lucide-react';
+import { Check, Cloud, Copy, FileUp, Fingerprint, KeyRound, Lock, ShieldCheck, WifiOff } from 'lucide-react';
 import { Button } from '../components/Button';
 import { TextField } from '../components/kit';
 import { session } from '../../vault/session';
@@ -13,14 +13,85 @@ import { cx } from '../format';
 import { WrongSecretError } from '../../vault/crypto';
 import { patchSettings } from '../actions';
 import { strength } from '../labels';
+import { adoptFromCloud, cancelRestore, cloudSupported, connectCloud, useCloud } from '../cloud';
+import { providerLabel, providers } from '../../cloud/providers';
+import { stampDate } from '../../domain/dates';
+import { day } from '../format';
 
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-full flex flex-col px-6 max-w-md mx-auto" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 32px)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
+  <div className="min-h-full flex flex-col px-6 max-w-md mx-auto animate-rise" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 32px)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
     {children}
   </div>
 );
 
+/** App mark. */
+export const Logo: React.FC<{ size?: number }> = ({ size = 64 }) => (
+  <div className="relative" style={{ width: size, height: size }}>
+    <img src="icons/icon-192.png" alt="" className="relative rounded-[22%]" style={{ width: size, height: size }} />
+  </div>
+);
+
+const StepTitle: React.FC<{ eyebrow: string; title: string; body?: React.ReactNode }> = ({ eyebrow, title, body }) => (
+  <>
+    <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-600 dark:text-primary-300">{eyebrow}</div>
+    <h1 className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.02em] mt-1.5">{title}</h1>
+    {body && <p className="text-neutral-500 dark:text-neutral-400 mt-2 text-sm leading-relaxed">{body}</p>}
+  </>
+);
+
 type Step = 'welcome' | 'passphrase' | 'recovery' | 'biometric' | 'import';
+
+/** Setting up a new device from the encrypted copy in Google Drive or Dropbox. */
+const CloudRestore: React.FC<{ onCreateNew: () => void }> = ({ onCreateNew }) => {
+  const { open } = useVault();
+  const cloud = useCloud();
+  const r = cloud.restore!;
+  const [pass, setPass] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const where = `${providerLabel(r.provider)} (${r.account})`;
+
+  const unlock = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      open(await adoptFromCloud(pass, newId()));
+    } catch (e) {
+      setError(e instanceof WrongSecretError ? 'That passphrase does not open this vault' : (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Shell>
+      <div className="flex-1">
+        <div className="h-14 w-14 rounded-2xl bg-primary-50 text-primary-600 dark:bg-primary-500/15 dark:text-primary-300 flex items-center justify-center mb-6"><Cloud size={26} /></div>
+        {r.checking ? (
+          <StepTitle eyebrow="Cloud vault" title="Looking for your vault…" body={`Checking ${where}.`} />
+        ) : r.error ? (
+          <StepTitle eyebrow="Cloud vault" title="Could not reach your cloud" body={r.error} />
+        ) : r.file ? (
+          <>
+            <StepTitle eyebrow="Cloud vault" title="Found your vault" body={<>In {where}, last saved {day(stampDate(r.file.updatedAt))}. Enter its passphrase to open it on this device.</>} />
+            <form className="mt-6 space-y-4" onSubmit={e => { e.preventDefault(); unlock(); }}>
+              <TextField label="Passphrase" type="password" value={pass} onChange={setPass} autoFocus autoComplete="current-password" error={error} />
+              <Button type="submit" size="lg" fullWidth disabled={!pass} isLoading={busy}>Open vault</Button>
+            </form>
+          </>
+        ) : (
+          <StepTitle eyebrow="Cloud vault" title="No vault there yet" body={`${where} has no Finora vault. Create one now and it will be saved there automatically.`} />
+        )}
+      </div>
+      {!r.checking && (
+        <div className="space-y-2">
+          {!r.file && <Button size="lg" fullWidth onClick={onCreateNew}>Create a new vault</Button>}
+          <Button variant="ghost" fullWidth onClick={() => cancelRestore()}>Back</Button>
+        </div>
+      )}
+    </Shell>
+  );
+};
 
 export const Onboarding: React.FC = () => {
   const { open } = useVault();
@@ -38,6 +109,8 @@ export const Onboarding: React.FC = () => {
   const [importPass, setImportPass] = useState('');
 
   useEffect(() => { biometryAvailable().then(setBio); }, []);
+  const cloud = useCloud();
+  const cloudProviders = cloudSupported() ? providers().filter(p => p.available) : [];
 
   const st = strength(pass);
   const canCreate = pass.length >= 8 && pass === confirm && !busy;
@@ -78,23 +151,30 @@ export const Onboarding: React.FC = () => {
     }
   };
 
+  if (cloud.restore && step === 'welcome') {
+    return <CloudRestore onCreateNew={() => setStep('passphrase')} />;
+  }
+
   if (step === 'welcome') {
     return (
       <Shell>
         <div className="flex-1 flex flex-col justify-center">
-          <div className="h-16 w-16 rounded-2xl bg-primary-600 text-white flex items-center justify-center mb-6"><Sparkles size={32} /></div>
-          <h1 className="text-3xl font-bold leading-tight">Your whole financial life.<br />Only on your phone.</h1>
-          <ul className="mt-8 space-y-4 text-[15px]">
+          <Logo />
+          <h1 className="font-display text-[40px] leading-[1.05] font-extrabold tracking-[-0.035em] mt-8">
+            Your money.<br /><span className="text-primary-600">Only on your phone.</span>
+          </h1>
+          <p className="text-neutral-500 dark:text-neutral-400 mt-3 text-[15px] leading-relaxed">Investments, SIPs, loans, spending and tax in one encrypted vault. No account, no server.</p>
+          <ul className="mt-9 space-y-3">
             {[
-              [ShieldCheck, 'No account, no server', 'Everything is encrypted on this device. Nobody else can see it, including us.'],
-              [WifiOff, 'Works offline', 'The internet is used only to fetch fund NAVs and stock prices.'],
-              [FileUp, 'Import in seconds', 'CAMS / KFintech / CDSL / NSDL statements, broker exports and bank statements.'],
-            ].map(([Icon, title, body]) => {
+              [ShieldCheck, 'Private by design', 'AES-256 encrypted on this device. Nobody else can read it, not even us.'],
+              [WifiOff, 'Works offline', 'The internet is only used to fetch fund NAVs and stock prices.'],
+              [FileUp, 'Import in seconds', 'CAMS, KFintech, CDSL, NSDL, broker and bank statements.'],
+            ].map(([Icon, title, body], i) => {
               const I = Icon as typeof ShieldCheck;
               return (
-                <li key={title as string} className="flex gap-3">
-                  <I className="shrink-0 text-primary-600 mt-0.5" size={22} />
-                  <div><div className="font-semibold">{title as string}</div><div className="text-neutral-500 dark:text-neutral-400 text-sm">{body as string}</div></div>
+                <li key={title as string} className="surface rounded-2xl p-3.5 flex gap-3.5 items-start animate-rise" style={{ animationDelay: `${120 + i * 80}ms` }}>
+                  <span className="h-10 w-10 shrink-0 rounded-xl bg-primary-100 text-primary-700 dark:bg-primary-400/15 dark:text-primary-200 flex items-center justify-center"><I size={19} /></span>
+                  <div><div className="font-semibold text-[15px]">{title as string}</div><div className="text-neutral-500 dark:text-neutral-400 text-[13px] leading-snug mt-0.5">{body as string}</div></div>
                 </li>
               );
             })}
@@ -102,7 +182,10 @@ export const Onboarding: React.FC = () => {
         </div>
         <div className="space-y-3">
           <Button size="lg" fullWidth onClick={() => setStep('passphrase')}>Create my vault</Button>
-          <Button size="lg" variant="ghost" fullWidth onClick={() => setStep('import')}>I have a Finora backup</Button>
+          {cloudProviders.map(p => (
+            <Button key={p.id} size="lg" variant="secondary" fullWidth iconLeft={<Cloud size={18} />} onClick={() => connectCloud(p.id, 'restore')}>Open my vault from {p.label}</Button>
+          ))}
+          <Button size="lg" variant="ghost" fullWidth onClick={() => setStep('import')}>I have a backup file</Button>
         </div>
       </Shell>
     );
@@ -111,8 +194,7 @@ export const Onboarding: React.FC = () => {
   if (step === 'import') {
     return (
       <Shell>
-        <h1 className="text-2xl font-bold">Restore from a backup</h1>
-        <p className="text-neutral-500 mt-2 text-sm">Pick a <b>.finora</b> export from your other phone, or an <b>.enc</b> file from the old Finora web app.</p>
+        <StepTitle eyebrow="Restore" title="Open a backup" body={<>Pick a <b>.finora</b> export from your other phone, or an <b>.enc</b> file from the old Finora web app.</>} />
         <div className="mt-6 space-y-4 flex-1">
           <Button variant="outline" fullWidth iconLeft={<FileUp size={18} />} onClick={async () => {
             const f = await pickFile(['*/*']);
@@ -131,8 +213,7 @@ export const Onboarding: React.FC = () => {
   if (step === 'passphrase') {
     return (
       <Shell>
-        <h1 className="text-2xl font-bold">{initial ? 'Protect this phone’s copy' : 'Set your vault passphrase'}</h1>
-        <p className="text-neutral-500 mt-2 text-sm">It encrypts your data. A short sentence is easier to remember and harder to guess than a password.</p>
+        <StepTitle eyebrow="Step 1 of 2" title={initial ? 'Protect this phone’s copy' : 'Choose a passphrase'} body="It encrypts everything. A short sentence is easier to remember and harder to guess than a password." />
         <div className="mt-6 space-y-4 flex-1">
           {!initial && <TextField label="Your name" value={name} onChange={setName} placeholder="Shown on your portfolio" autoComplete="given-name" />}
           <TextField label="Passphrase" type="password" value={pass} onChange={setPass} autoComplete="new-password" placeholder="e.g. my dosa is always crispy" />
@@ -154,11 +235,10 @@ export const Onboarding: React.FC = () => {
     const tail = groups[groups.length - 1];
     return (
       <Shell>
-        <div className="h-12 w-12 rounded-xl bg-warning-100 text-warning-700 dark:bg-warning-900 dark:text-warning-300 flex items-center justify-center mb-4"><KeyRound /></div>
-        <h1 className="text-2xl font-bold">Write down your recovery code</h1>
-        <p className="text-neutral-500 mt-2 text-sm">If you forget your passphrase, this code is the only way back in. It is shown once and never stored. Keep it on paper, not in a screenshot.</p>
-        <div className="mt-5 grid grid-cols-3 gap-2 font-mono text-[15px] text-center select-all">
-          {groups.map((g, i) => <span key={i} className="py-2 rounded-lg bg-neutral-100 dark:bg-neutral-900">{g}</span>)}
+        <div className="h-12 w-12 rounded-2xl bg-primary-100 text-primary-700 dark:bg-primary-400/15 dark:text-primary-200 flex items-center justify-center mb-5"><KeyRound /></div>
+        <StepTitle eyebrow="Step 2 of 2" title="Your recovery code" body="If you forget your passphrase, this code is the only way back in. It is shown once and never stored. Keep it on paper, not in a screenshot." />
+        <div className="mt-6 grid grid-cols-3 gap-2 font-mono text-[15px] font-semibold text-center select-all">
+          {groups.map((g, i) => <span key={i} className="surface py-2.5 rounded-xl tracking-[0.08em] animate-rise" style={{ animationDelay: `${i * 25}ms` }}>{g}</span>)}
         </div>
         <button className="mt-3 text-sm text-primary-600 inline-flex items-center gap-1" onClick={() => navigator.clipboard?.writeText(recovery).then(() => toast.info('Copied. Paste it somewhere safe, then clear your clipboard.'))}>
           <Copy size={14} /> Copy
@@ -174,8 +254,8 @@ export const Onboarding: React.FC = () => {
   return (
     <Shell>
       <div className="flex-1 flex flex-col justify-center items-center text-center">
-        <div className="h-20 w-20 rounded-full bg-primary-50 dark:bg-primary-950 text-primary-600 flex items-center justify-center mb-6"><Fingerprint size={40} /></div>
-        <h1 className="text-2xl font-bold">Unlock with {bio.label}?</h1>
+        <div className="h-24 w-24 rounded-[30px] bg-primary-50 text-primary-600 dark:bg-primary-500/15 dark:text-primary-300 flex items-center justify-center mb-7 animate-pop-in"><Fingerprint size={46} /></div>
+        <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em]">Unlock with {bio.label}?</h1>
         <p className="text-neutral-500 mt-2 text-sm max-w-xs">Your vault key is kept in this phone’s secure hardware and released only after {bio.label}. You can still use your passphrase.</p>
       </div>
       <div className="space-y-3">

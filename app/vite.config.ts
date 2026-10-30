@@ -2,7 +2,7 @@
 import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-import { routePriceRequest } from './api/_lib/priceProxy';
+import { routeApi } from './api/_lib/router';
 
 /**
  * Two builds from one codebase:
@@ -11,8 +11,8 @@ import { routePriceRequest } from './api/_lib/priceProxy';
  *                                        Vercel together with the api/ price functions
  */
 /**
- * Serves the same /api price routes that Vercel runs in production, so `npm run dev` and
- * `npm run preview:pwa` get live prices without the Vercel CLI.
+ * Serves the same /api routes that Vercel runs in production (prices, Google token exchange), so
+ * `npm run dev` and `npm run preview:pwa` work without the Vercel CLI.
  */
 function localPriceApi(): Plugin {
   const mount = (server: ViteDevServer | PreviewServer) => {
@@ -20,7 +20,9 @@ function localPriceApi(): Plugin {
       if (!req.url?.startsWith('/api/')) return next();
       const headers = new Headers();
       for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v);
-      const response = await routePriceRequest(new Request(`http://${req.headers.host}${req.url}`, { method: req.method, headers }));
+      const chunks: Buffer[] = [];
+      if (req.method === 'POST') for await (const c of req) chunks.push(c as Buffer);
+      const response = await routeApi(new Request(`http://${req.headers.host}${req.url}`, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined }));
       res.statusCode = response.status;
       response.headers.forEach((v, k) => res.setHeader(k, v));
       res.end(Buffer.from(await response.arrayBuffer()));
@@ -50,8 +52,8 @@ export default defineConfig(({ mode }) => {
           scope: '/',
           display: 'standalone',
           orientation: 'portrait',
-          background_color: '#0b0f19',
-          theme_color: '#2563EB',
+          background_color: '#0b0b12',
+          theme_color: '#7466F1',
           categories: ['finance', 'productivity'],
           icons: [
             { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },

@@ -6,6 +6,7 @@ import { session } from '../../vault/session';
 import { loadDataKey } from '../../platform/secure';
 import { WrongSecretError } from '../../vault/crypto';
 import { useVault } from '../vault';
+import { Logo } from './Onboarding';
 import { toast } from '../toast';
 
 export const LockScreen: React.FC = () => {
@@ -48,12 +49,21 @@ export const LockScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full flex flex-col px-6 max-w-md mx-auto" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 64px)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
+    <div className="min-h-full flex flex-col px-6 max-w-md mx-auto animate-rise" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 72px)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
       <div className="flex-1">
-        <div className="h-16 w-16 rounded-2xl bg-primary-600 text-white flex items-center justify-center mb-6"><LockIcon size={30} /></div>
-        <h1 className="text-2xl font-bold">Finora is locked</h1>
-        <p className="text-neutral-500 text-sm mt-1">{mode === 'passphrase' ? 'Enter your vault passphrase.' : 'Enter the 52-character recovery code you wrote down.'}</p>
-        <form className="mt-6 space-y-4" onSubmit={e => { e.preventDefault(); unlock(); }}>
+        <div className="flex flex-col items-center text-center">
+          <Logo size={76} />
+          <div className="mt-7 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-600 dark:text-primary-300"><LockIcon size={12} /> Vault locked</div>
+          <h1 className="font-display text-[30px] font-extrabold tracking-[-0.02em] mt-1.5">Welcome back</h1>
+          <p className="text-neutral-500 dark:text-neutral-400 text-sm mt-1">{mode === 'passphrase' ? 'Enter your passphrase to open your vault.' : 'Enter the 52-character recovery code you wrote down.'}</p>
+        </div>
+        {hasBio && mode === 'passphrase' && (
+          <button onClick={tryBio} className="pressable mt-8 mx-auto flex flex-col items-center gap-2 text-[13px] font-semibold text-neutral-600 dark:text-neutral-300">
+            <span className="h-[68px] w-[68px] rounded-[24px] bg-primary-50 text-primary-600 dark:bg-primary-500/15 dark:text-primary-300 flex items-center justify-center"><Fingerprint size={34} /></span>
+            Use biometrics
+          </button>
+        )}
+        <form className="mt-8 space-y-4" onSubmit={e => { e.preventDefault(); unlock(); }}>
           <TextField
             label={mode === 'passphrase' ? 'Passphrase' : 'Recovery code'}
             type={mode === 'passphrase' ? 'password' : 'text'}
@@ -62,10 +72,9 @@ export const LockScreen: React.FC = () => {
           />
           <Button type="submit" size="lg" fullWidth disabled={!pass} isLoading={busy}>Unlock</Button>
         </form>
-        {hasBio && <Button className="mt-3" variant="outline" size="lg" fullWidth iconLeft={<Fingerprint size={20} />} onClick={tryBio}>Use biometrics</Button>}
       </div>
       <div className="space-y-2 text-center">
-        <button className="text-sm text-primary-600" onClick={() => { setMode(m => (m === 'passphrase' ? 'recovery' : 'passphrase')); setPass(''); setError(''); }}>
+        <button className="text-[13px] font-semibold text-primary-600" onClick={() => { setMode(m => (m === 'passphrase' ? 'recovery' : 'passphrase')); setPass(''); setError(''); }}>
           {mode === 'passphrase' ? 'Forgot passphrase? Use recovery code' : 'Use passphrase instead'}
         </button>
         {attempts >= 5 && (

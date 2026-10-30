@@ -43,6 +43,10 @@ A local-first personal finance app for Android and iOS. Investments, SIPs, loans
 - Daily net-worth snapshots and chart
 - **Family emergency file**: a (password-protected) PDF of every folio, loan, SIP and nominee
 
+**Cloud vault (PWA, optional)**
+- Keep one encrypted copy in your own Google Drive or Dropbox; devices sync through it with record-level merging
+- Set up a new device with "Open my vault from Google Drive/Dropbox"
+
 **Privacy and UX**
 - AES-256-GCM vault; unlock with passphrase, biometrics or a 52-character recovery code
 - Auto-lock, screenshot blocking, app-switcher blur, one-tap **hide amounts**

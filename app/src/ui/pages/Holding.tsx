@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Button } from '../components/Button';
-import { AmountField, DateField, IconButton, List, Money, Panel, Row, Screen, Section, Segmented, Sheet, Stat } from '../components/kit';
+import { HeroCard, AmountField, DateField, IconButton, List, Money, Row, Screen, Section, Segmented, Sheet, Stat } from '../components/kit';
 import { HoldingSheet } from '../components/HoldingSheet';
 import { useData, usePositions, useStore } from '../vault';
 import { D, dec, price, units as toUnits } from '../../domain/money';
@@ -106,10 +106,10 @@ export default function HoldingPage() {
       <IconButton label="Edit" onClick={() => setEdit(true)}><Pencil size={18} /></IconButton>
       <IconButton label="Delete" onClick={deleteHolding}><Trash2 size={18} /></IconButton>
     </>}>
-      <Panel className="p-4">
-        <div className="text-xs text-neutral-500">Value</div>
-        <div className="text-3xl font-bold"><Money value={p.value} /></div>
-        <div className="text-xs text-neutral-500 mt-0.5">{qty(p.units)} units × <Money value={p.price} paise />{h.priceDate ? ` on ${day(h.priceDate, 'dd MMM')}` : ''}</div>
+      <HeroCard>
+        <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">Value</div>
+        <div className="font-display text-[36px] leading-tight font-extrabold tracking-[-0.03em] mt-1"><Money value={p.value} /></div>
+        <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{qty(p.units)} units × <Money value={p.price} paise />{h.priceDate ? ` on ${day(h.priceDate, 'dd MMM')}` : ''}</div>
         <div className="grid grid-cols-3 gap-3 mt-4">
           <Stat label="Invested" value={<Money value={p.invested} short />} sub={<span className="text-neutral-500">avg <Money value={p.avgCost} paise /></span>} />
           <Stat label="Gain" value={<Money value={p.unrealized} short signed className={tone(p.unrealized)} />} sub={<span className={tone(p.unrealized)}>{pct(p.unrealizedPct)}</span>} />
@@ -128,7 +128,7 @@ export default function HoldingPage() {
           <Button size="sm" variant="secondary" disabled={p.units.lte(0)} onClick={() => setTxnSheet({ kind: 'SELL' })}>Sell</Button>
           <Button size="sm" variant="secondary" onClick={() => setTxnSheet({ kind: 'DIVIDEND' })}>Dividend</Button>
         </div>
-      </Panel>
+      </HeroCard>
 
       {p.lots.length > 0 && (
         <Section title="Lots (sold first-in, first-out)">

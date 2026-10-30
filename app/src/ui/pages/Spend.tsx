@@ -17,6 +17,7 @@ import { live } from '../../domain/records';
 import type { Entry } from '../../domain/types';
 import { smsSupported } from '../../platform/capture';
 import { day, tone } from '../format';
+import { categoryVisual, rowIcon } from '../visuals';
 
 export default function SpendPage() {
   const data = useData();
@@ -112,7 +113,7 @@ export default function SpendPage() {
           <Section key={date} title={day(date, 'EEE, dd MMM')} action={<span className="text-xs text-neutral-500"><Money value={entries.filter(e => e.kind === 'EXPENSE').reduce((s, e) => s.plus(D(e.amount)), ZERO)} /></span>}>
             <List>
               {entries.map(e => (
-                <Row key={e.id} onClick={() => setEditing(e)} title={e.description} subtitle={`${e.category} · ${e.paymentMethod}${e.source === 'SMS' ? ' · SMS' : e.source === 'OCR' ? ' · scanned' : ''}`}
+                <Row key={e.id} onClick={() => setEditing(e)} {...rowIcon(categoryVisual(e.category, e.kind === 'INCOME'))} title={e.description} subtitle={`${e.category} · ${e.paymentMethod}${e.source === 'SMS' ? ' · SMS' : e.source === 'OCR' ? ' · scanned' : ''}`}
                   trailing={<Money value={e.kind === 'INCOME' ? e.amount : D(e.amount).neg()} className={e.kind === 'INCOME' ? 'text-success-600' : ''} />} />
               ))}
             </List>

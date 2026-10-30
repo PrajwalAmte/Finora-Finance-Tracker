@@ -38,20 +38,20 @@ export const Toaster: React.FC = () => {
     return () => { listeners.delete(l); };
   }, []);
   return (
-    <div className="fixed inset-x-0 z-[60] flex flex-col items-center gap-2 px-4 pointer-events-none" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 76px)' }}>
+    <div className="fixed inset-x-0 z-[60] flex flex-col items-center gap-2 px-4 pointer-events-none" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 88px)' }}>
       {items.map(t => (
         <div
           key={t.id}
           role="status"
           className={cx(
-            'pointer-events-auto w-full max-w-md flex items-center gap-3 rounded-xl px-4 py-3 shadow-lg text-sm animate-slide-up',
-            t.tone === 'error' ? 'bg-error-600 text-white' : 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900',
+            'pointer-events-auto w-full max-w-md flex items-center gap-3 rounded-2xl px-4 py-3.5 shadow-float text-[13.5px] font-medium animate-slide-up backdrop-blur-xl',
+            t.tone === 'error' ? 'bg-error-500/95 text-white' : 'bg-neutral-900/95 text-white ring-1 ring-white/10 dark:bg-[#1c1c22]/95',
           )}
         >
           <span className="flex-1">{t.message}</span>
           {t.action && (
             <button
-              className="font-semibold text-primary-300 dark:text-primary-700 uppercase text-xs tracking-wide"
+              className="font-bold text-primary-300 uppercase text-xs tracking-[0.12em]"
               onClick={() => {
                 t.action!.onClick();
                 setItems(prev => prev.filter(x => x.id !== t.id));

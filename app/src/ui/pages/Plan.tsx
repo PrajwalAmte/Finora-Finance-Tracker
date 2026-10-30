@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Target, Trash2 } from 'lucide-react';
 import { Button } from '../components/Button';
-import { AmountField, DateField, List, Money, Panel, PrivacyToggle, Row, Screen, Section, Segmented, SelectField, Sheet, Stat, TextField, Toggle } from '../components/kit';
+import { HeroCard, AmountField, DateField, List, Money, Panel, PrivacyToggle, Row, Screen, Section, Segmented, SelectField, Sheet, Stat, TextField, Toggle } from '../components/kit';
 import { useData, usePositions, useStore } from '../vault';
 import { D, dec } from '../../domain/money';
 import { addMonths, today } from '../../domain/dates';
@@ -11,6 +11,7 @@ import { goalProgress } from '../../domain/planner/goals';
 import type { EntryKind, Goal, Recurring } from '../../domain/types';
 import { removeWithUndo, setSettings } from '../actions';
 import { cx, day } from '../format';
+import { calendarVisual, categoryVisual, rowIcon } from '../visuals';
 import { toast } from '../toast';
 
 const RecurringSheet: React.FC<{ open: boolean; onClose: () => void; item?: Recurring }> = ({ open, onClose, item }) => {
@@ -126,9 +127,9 @@ export default function PlanPage() {
 
   return (
     <Screen title="Plan" actions={<PrivacyToggle />}>
-      <Panel className="p-4">
-        <div className="text-xs text-neutral-500">Safe to spend · {sts.daysLeft} days left this month</div>
-        <div className={cx('text-3xl font-bold', sts.safe.lt(0) && 'text-error-600')}><Money value={sts.safe} /></div>
+      <HeroCard>
+        <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">Safe to spend · {sts.daysLeft} days left this month</div>
+        <div className={cx('font-display text-[36px] leading-tight font-extrabold tracking-[-0.03em] mt-1', sts.safe.lt(0) ? 'text-error-500' : '')}><Money value={sts.safe} animate /></div>
         <div className="mt-3 space-y-1.5 text-sm">
           {[
             [sts.incomeIsExpected ? 'Income (expected)' : 'Income', sts.income, false],
@@ -136,10 +137,13 @@ export default function PlanPage() {
             ['Spent so far', sts.spent, true],
             ['Savings target', sts.savingsTarget, true],
           ].map(([label, v, minus]) => (
-            <div key={label as string} className="flex justify-between"><span className="text-neutral-500">{label as string}</span><span>{minus ? '− ' : ''}<Money value={v as never} /></span></div>
+            <div key={label as string} className="flex justify-between"><span className="text-neutral-500 dark:text-neutral-400">{label as string}</span><span className="num font-semibold">{minus ? '− ' : ''}<Money value={v as never} /></span></div>
           ))}
         </div>
-        <div className="mt-3"><AmountField label="Monthly savings target" value={data.settings.monthlySavingsTarget === '0' ? '' : data.settings.monthlySavingsTarget} onChange={v => setSettings(store, { monthlySavingsTarget: v || '0' })} hint="Kept aside before anything counts as safe to spend." /></div>
+      </HeroCard>
+
+      <Panel className="p-4">
+        <AmountField label="Monthly savings target" value={data.settings.monthlySavingsTarget === '0' ? '' : data.settings.monthlySavingsTarget} onChange={v => setSettings(store, { monthlySavingsTarget: v || '0' })} hint="Kept aside before anything counts as safe to spend." />
       </Panel>
 
       <Section title="Money calendar" action={<div className="w-36"><Segmented value={range} onChange={setRange} options={[{ value: '30', label: '30 days' }, { value: '90', label: '90 days' }]} /></div>}>
@@ -152,7 +156,7 @@ export default function PlanPage() {
         ) : (
           <List>
             {items.map(i => (
-              <Row key={`${i.kind}-${i.refId}-${i.date}`} title={i.title} subtitle={`${day(i.date, 'EEE dd MMM')} · ${{ EMI: 'EMI', SIP: 'SIP', BILL: 'Bill', INCOME: 'Income' }[i.kind]}`}
+              <Row key={`${i.kind}-${i.refId}-${i.date}`} {...rowIcon(calendarVisual(i.kind))} title={i.title} subtitle={`${day(i.date, 'EEE dd MMM')} · ${{ EMI: 'EMI', SIP: 'SIP', BILL: 'Bill', INCOME: 'Income' }[i.kind]}`}
                 trailing={<Money value={i.outflow ? i.amount.neg() : i.amount} className={i.outflow ? '' : 'text-success-600'} />} />
             ))}
           </List>
@@ -165,7 +169,7 @@ export default function PlanPage() {
         ) : (
           <List>
             {live(data.recurring).map(r => (
-              <Row key={r.id} onClick={() => setRecurring({ item: r })} title={r.name} subtitle={`Day ${r.dayOfMonth} · ${r.category}${r.active ? '' : ' · paused'}`} trailing={<Money value={r.amount} className={r.kind === 'INCOME' ? 'text-success-600' : ''} />} />
+              <Row key={r.id} onClick={() => setRecurring({ item: r })} {...rowIcon(categoryVisual(r.category, r.kind === 'INCOME'))} title={r.name} subtitle={`Day ${r.dayOfMonth} · ${r.category}${r.active ? '' : ' · paused'}`} trailing={<Money value={r.amount} className={r.kind === 'INCOME' ? 'text-success-600' : ''} />} />
             ))}
           </List>
         )}

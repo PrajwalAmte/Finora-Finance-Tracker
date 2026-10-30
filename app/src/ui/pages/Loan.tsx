@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Calculator, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '../components/Button';
-import { AmountField, DateField, IconButton, List, Money, Panel, Row, Screen, Section, Segmented, Sheet, Stat } from '../components/kit';
+import { HeroCard, AmountField, DateField, IconButton, List, Money, Row, Screen, Section, Segmented, Sheet, Stat } from '../components/kit';
 import { LoanSheet } from '../components/LoanSheet';
 import { useData, useStore } from '../vault';
 import { D } from '../../domain/money';
@@ -51,9 +51,9 @@ export default function LoanPage() {
       <IconButton label="Edit" onClick={() => setEdit(true)}><Pencil size={18} /></IconButton>
       <IconButton label="Delete" onClick={del}><Trash2 size={18} /></IconButton>
     </>}>
-      <Panel className="p-4">
-        <div className="text-xs text-neutral-500">Outstanding as of {day(loan.balanceAsOf)}</div>
-        <div className="text-3xl font-bold"><Money value={loan.balance} /></div>
+      <HeroCard>
+        <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">Outstanding as of {day(loan.balanceAsOf)}</div>
+        <div className="font-display text-[36px] leading-tight font-extrabold tracking-[-0.03em] mt-1"><Money value={loan.balance} /></div>
         <div className="grid grid-cols-3 gap-3 mt-4">
           <Stat label="EMI" value={<Money value={loan.emi} />} sub={<span className="text-neutral-500">on day {loan.emiDay}</span>} />
           <Stat label="Months left" value={loan.closedAt ? 'Closed' : t.months} sub={sched.length ? <span className="text-neutral-500">ends {day(sched[sched.length - 1].date, 'MMM yyyy')}</span> : undefined} />
@@ -66,7 +66,7 @@ export default function LoanPage() {
           </div>
         )}
         {sched.length === 0 && !loan.closedAt && D(loan.balance).gt(0) && <p className="text-xs text-error-600 mt-3">The EMI does not cover the monthly interest, so this loan never closes. Check the EMI and rate.</p>}
-      </Panel>
+      </HeroCard>
 
       {sched.length > 0 && (
         <Section title="Upcoming EMIs" action={sched.length > 6 && <button className="text-sm text-primary-600" onClick={() => setShowAll(s => !s)}>{showAll ? 'Less' : `All ${sched.length}`}</button>}>

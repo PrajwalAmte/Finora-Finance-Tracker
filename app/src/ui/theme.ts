@@ -11,7 +11,7 @@ function systemDark(): boolean {
 export function applyTheme(setting: ThemeSetting): boolean {
   const dark = setting === 'dark' || (setting === 'system' && systemDark());
   document.documentElement.classList.toggle('dark', dark);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0b0f19' : '#f8fafc');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0b0b12' : '#f6f6fa');
   // Light status-bar text on dark screens and the reverse; otherwise the clock vanishes on iOS.
   applyStatusBar(dark);
   return dark;

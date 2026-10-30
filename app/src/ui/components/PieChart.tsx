@@ -22,18 +22,8 @@ interface PieChartProps {
   hideValues?: boolean;
 }
 
-const COLORS = [
-  '#3867D6',
-  '#48BB78',
-  '#F59E0B',
-  '#E53E3E',
-  '#8B5CF6',
-  '#EC4899',
-  '#14B8A6',
-  '#0EA5E9',
-  '#6366F1',
-  '#EF4444',
-];
+// Brand iris first, then bright tones that sit well on both the ink and the light background.
+const COLORS = ['#7466F1', '#2DD4BF', '#F472B6', '#FBBF24', '#60A5FA', '#FB923C', '#3DDC97', '#C084FC', '#FF6B6B', '#94A3B8'];
 
 export const PieChart: React.FC<PieChartProps> = ({
   data,
@@ -62,6 +52,7 @@ export const PieChart: React.FC<PieChartProps> = ({
   }
 
   const total = filteredData.reduce((sum, d) => sum + d.value, 0);
+  const top = filteredData.reduce((a, b) => (b.value > a.value ? b : a), filteredData[0]);
 
   interface PieTooltipEntry {
     payload: { name: string; value: number };
@@ -97,28 +88,6 @@ export const PieChart: React.FC<PieChartProps> = ({
     );
   };
 
-  interface PieLabelProps {
-    cx: number;
-    cy: number;
-    midAngle: number;
-    innerRadius: number;
-    outerRadius: number;
-    percent: number;
-  }
-
-  const renderLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: PieLabelProps) => {
-    if (percent < 0.06) return null;
-    const RADIAN = Math.PI / 180;
-    const r = innerRadius + (outerRadius - innerRadius) * 0.55;
-    const x = cx + r * Math.cos(-midAngle * RADIAN);
-    const y = cy + r * Math.sin(-midAngle * RADIAN);
-    return (
-      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
-        {`${(percent * 100).toFixed(0)}%`}
-      </text>
-    );
-  };
-
   return (
     <div className={className ?? ''}>
       {title && (
@@ -126,6 +95,11 @@ export const PieChart: React.FC<PieChartProps> = ({
       )}
 
       {/* Chart — no Legend inside so Recharts never reserves internal space for it */}
+      <div className="relative">
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <div className="font-display text-xl font-extrabold num">{((top.value / total) * 100).toFixed(0)}%</div>
+        <div className="text-[11px] text-neutral-500 dark:text-neutral-400 max-w-[90px] truncate">{top.name}</div>
+      </div>
       <ResponsiveContainer width="100%" height={height}>
         <RechartsPieChart>
           <Pie
@@ -134,9 +108,13 @@ export const PieChart: React.FC<PieChartProps> = ({
             nameKey="name"
             cx="50%"
             cy="50%"
-            outerRadius="80%"
+            outerRadius="82%"
+            innerRadius="56%"
+            paddingAngle={filteredData.length > 1 ? 2 : 0}
+            cornerRadius={6}
+            stroke="none"
             labelLine={false}
-            label={renderLabel}
+            label={false}
           >
             {filteredData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -145,6 +123,7 @@ export const PieChart: React.FC<PieChartProps> = ({
           <Tooltip content={<CustomTooltip />} wrapperStyle={{ outline: 'none' }} />
         </RechartsPieChart>
       </ResponsiveContainer>
+      </div>
 
       {/* Legend rendered as plain HTML below the chart — never clipped or overlapping */}
       <ul className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-3 px-2">

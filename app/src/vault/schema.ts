@@ -21,7 +21,7 @@ export function defaultSettings(): Settings {
     paymentMethods: DEFAULT_PAYMENT_METHODS,
     autoLockMinutes: 2,
     privacyMode: false,
-    theme: 'system',
+    theme: 'dark',
     slabRatePct: '30',
     monthlySavingsTarget: '0',
     dismissedInsights: [],

@@ -12,6 +12,8 @@ import { toCurrent } from './migrate';
 
 const KEYRING = 'keyring.json';
 const VAULT = 'vault.bin';
+/** Device-only secrets (cloud sign-in tokens), encrypted with the data key. Never synced or exported. */
+const DEVICE_SECRETS = 'device.bin';
 
 type Bytes = Uint8Array<ArrayBuffer>;
 
@@ -167,6 +169,61 @@ export class VaultSession {
     return { data: format === 'v2' ? normalize(parsed, deviceId) : toCurrent(parsed, deviceId), format };
   }
 
+  // ── Cloud vault support ─────────────────────────────────────────────────
+
+  /** The keyring plus `data` encrypted with the data key: what goes into the cloud file. */
+  async sealForCloud(data: VaultData): Promise<{ keyring: Keyring; vault: Bytes }> {
+    if (!this.key) throw new Error('Vault is locked');
+    return { keyring: await this.loadKeyring(), vault: await encryptVault(this.key, JSON.stringify(data)) };
+  }
+
+  /** Decrypt a cloud copy with this device's data key; null when it belongs to a different vault. */
+  async openWithCurrentKey(vault: Bytes, deviceId: string): Promise<VaultData | null> {
+    if (!this.key) throw new Error('Vault is locked');
+    try {
+      return toCurrent(JSON.parse(await decryptVault(this.key, vault)), deviceId);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Make a cloud vault this device's vault: unlock its keyring with the passphrase, then store the
+   * keyring and data locally. Used when setting up a new device from Google Drive or Dropbox.
+   */
+  async adoptCloudVault(keyring: Keyring, vault: Bytes, passphrase: string, deviceId: string): Promise<VaultData> {
+    const raw = await unlockWithPassphrase(keyring, passphrase);
+    const key = await importDataKey(raw);
+    const data = toCurrent(JSON.parse(await decryptVault(key, vault)), deviceId);
+    data.meta = { ...data.meta, deviceId };
+    await files.writeAtomic(KEYRING, JSON.stringify(keyring));
+    this.keyring = keyring;
+    this.rawKey = raw;
+    this.key = key;
+    await this.writeNow(data);
+    return data;
+  }
+
+  async readDeviceSecrets<T>(): Promise<T | null> {
+    if (!this.key) return null;
+    const bytes = await files.readBytes(DEVICE_SECRETS);
+    if (!bytes) return null;
+    try {
+      return JSON.parse(await decryptVault(this.key, bytes)) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  async writeDeviceSecrets(value: unknown): Promise<void> {
+    if (!this.key) throw new Error('Vault is locked');
+    if (value === null) {
+      await files.removeFile(DEVICE_SECRETS);
+      return;
+    }
+    await files.writeAtomic(DEVICE_SECRETS, await encryptVault(this.key, JSON.stringify(value)));
+  }
+
   /** Erase the vault from this device. */
   async erase(): Promise<void> {
     if (this.saveTimer) clearTimeout(this.saveTimer);
@@ -175,7 +232,7 @@ export class VaultSession {
     this.rawKey = null;
     this.keyring = null;
     await secure.clearDataKey();
-    for (const name of [KEYRING, VAULT, `${VAULT}.bak`, `${VAULT}.tmp`]) await files.removeFile(name);
+    for (const name of [KEYRING, VAULT, `${VAULT}.bak`, `${VAULT}.tmp`, DEVICE_SECRETS]) await files.removeFile(name);
   }
 }
 

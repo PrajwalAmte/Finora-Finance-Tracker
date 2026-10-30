@@ -13,6 +13,7 @@ import { smsSupported } from '../../platform/capture';
 import { capabilities, isNative, platform, storageStatus } from '../../platform/device';
 import { useInstallPrompt } from '../install';
 import { SmsShortcutGuide } from '../components/ForwardedSms';
+import { CloudVaultSection } from '../components/CloudVault';
 import { emergencyPdf, excelReport } from '../../reports/reports';
 import { removeWithUndo, setSettings } from '../actions';
 import { applyTheme } from '../theme';
@@ -147,6 +148,8 @@ export default function SettingsPage() {
           <Row icon={<Lock size={18} />} title="Lock now" onClick={lock} />
         </List>
       </Section>
+
+      <CloudVaultSection />
 
       <Section title="Your data">
         <List>

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Info, Scissors, TrendingDown } from 'lucide-react';
 import { Button } from '../components/Button';
-import { AmountField, Chip, List, Money, Panel, Row, Screen, Section, Stat } from '../components/kit';
+import { HeroCard, AmountField, Chip, List, Money, Panel, Row, Screen, Section, Stat } from '../components/kit';
 import { useData, usePositions, useStore } from '../vault';
 import { financialYear, today } from '../../domain/dates';
 import { harvestSuggestions, lossCandidates, taxReport } from '../../domain/tax/capitalGains';
@@ -49,9 +49,9 @@ export default function TaxPage() {
         {fyOptions().map(o => <Chip key={o} active={o === fy} onClick={() => setFy(o)}>FY {o}</Chip>)}
       </div>
 
-      <Panel className="p-4">
-        <div className="text-xs text-neutral-500">Estimated tax {isCurrent ? 'so far' : ''} (incl. 4% cess)</div>
-        <div className="text-3xl font-bold"><Money value={report.totalTax} /></div>
+      <HeroCard>
+        <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">Estimated tax {isCurrent ? 'so far' : ''} (incl. 4% cess)</div>
+        <div className="font-display text-[36px] leading-tight font-extrabold tracking-[-0.03em] mt-1"><Money value={report.totalTax} /></div>
         <div className="grid grid-cols-2 gap-3 mt-4">
           <Stat label="Short-term gains" value={<Money value={report.shortTermGain} short signed className={tone(report.shortTermGain)} />} />
           <Stat label="Long-term gains" value={<Money value={report.longTermGain} short signed className={tone(report.longTermGain)} />} />
@@ -64,7 +64,7 @@ export default function TaxPage() {
           <Button size="sm" variant="secondary" iconLeft={<Download size={16} />} disabled={!report.rows.some(r => r.section112A)} onClick={() => exportCsv('112a')}>Schedule 112A</Button>
           <Button size="sm" variant="secondary" iconLeft={<Download size={16} />} disabled={report.rows.length === 0} onClick={() => exportCsv('all')}>All gains (CSV)</Button>
         </div>
-      </Panel>
+      </HeroCard>
 
       {isCurrent && (
         <Section title="Tax-gain harvesting">

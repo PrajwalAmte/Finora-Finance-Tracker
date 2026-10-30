@@ -17,6 +17,7 @@ A Progressive Web App built from the same `app/` code: installed from Safari/Chr
 | Quick add, categories, undo | ✅ | ✅ | |
 | Tax, XIRR, loans, simulator, goals, calendar, insights | ✅ | ✅ | Pure TypeScript |
 | Export / import backup | Share sheet | Web Share (iOS/Android) or download (desktop) | |
+| Cloud vault (Google Drive / Dropbox) | — | ✅ optional | Encrypted copy in the user's own cloud; keeps devices in sync. See *Cloud vault* below |
 | Excel report, emergency PDF, 112A CSV | ✅ | ✅ | |
 | NAV and stock price refresh | Direct | Via the app's own `/api` functions | AMFI and Yahoo send no CORS headers, so a browser cannot fetch them (checked) |
 | Payment screenshot → expense | Vision / ML Kit | Optional | Tesseract.js on-device: works, but ~10 MB download and less accurate |
@@ -86,3 +87,47 @@ cd app && npm run build:pwa && npm run preview:pwa      # production build with 
 ```
 
 The Vite dev and preview servers run the same `/api` code that Vercel runs, so prices work locally without the Vercel CLI.
+
+---
+
+## Cloud vault (Google Drive and Dropbox)
+
+Optional, PWA only. After linking an account in Settings → Cloud vault, Finora keeps **one encrypted file** (`Finora vault.finora-sync`) in that account:
+
+- The file holds the keyring and the vault encrypted with the data key. Google or Dropbox only ever see ciphertext; opening it needs the vault passphrase (or recovery code).
+- Sync runs on unlock, 15 seconds after edits stop, when the app goes to the background and when the network returns. It downloads the cloud copy, merges it record by record (newer edit wins, deletions travel, same as file import) and uploads only if the cloud is missing something. Writes are conditional on the revision that was read, so two devices saving at once never overwrite each other.
+- A new device can start with **"Open my vault from Google Drive/Dropbox"** on the welcome screen, then the passphrase.
+- If the account already holds a *different* vault (made with another passphrase), Finora asks before replacing it.
+- Sign-in tokens stay on the device, encrypted with the vault key, and are never synced or exported. "Unlink" removes them; the cloud file stays until you delete it there.
+- **Access is narrow:** Google uses the `drive.file` scope, so Finora sees only the file it created. On Dropbox, the app uses an App folder (`Apps/Finora/`).
+
+Why not iCloud or a shared link: a shared Drive/iCloud link is read-only, and iCloud Drive has no API a web app can write to. Saving needs a one-time sign-in with the provider.
+
+### Setting up Google Drive (free, about 15 minutes)
+
+1. Go to **console.cloud.google.com**, create a project (e.g. *Finora*).
+2. **APIs & Services → Library →** enable **Google Drive API**.
+3. **OAuth consent screen:** User type *External*; app name *Finora*; your email as support and developer contact; scopes: `.../auth/drive.file`, `openid`, `email` (all non-sensitive, so no Google verification review is needed). While the app is in *Testing*, only accounts listed under *Test users* can sign in, and Google expires their sign-in after 7 days (Finora will ask to sign in again). Click **Publish app** once it works; with only non-sensitive scopes this needs no review and removes the 7-day limit.
+4. **Credentials → Create credentials → OAuth client ID →** type *Web application*.
+   - Authorised JavaScript origins: `https://finora-finance-tracker-pwa.vercel.app`
+   - Authorised redirect URIs: `https://finora-finance-tracker-pwa.vercel.app/` (with the trailing slash)
+   - Add `http://localhost:5173` and `http://localhost:5173/` too for local testing.
+5. Copy the **Client ID** and **Client secret**.
+6. In Vercel → Project → Settings → **Environment Variables** add:
+   - `VITE_GOOGLE_CLIENT_ID` = the client ID (used by the page)
+   - `GOOGLE_CLIENT_ID` = the same client ID (used by `/api/google/token`)
+   - `GOOGLE_CLIENT_SECRET` = the client secret (server only; never put it in a `VITE_` variable)
+7. Redeploy.
+
+The secret is needed because Google only gives long-lived refresh tokens to apps that hold one, so the one token exchange step runs in the `/api/google/token` function. It forwards codes and refresh tokens to Google and stores nothing.
+
+### Setting up Dropbox (free, about 5 minutes)
+
+1. Go to **dropbox.com/developers/apps → Create app**: *Scoped access*, *App folder*, name *Finora* (or any free name).
+2. **Settings:** under *OAuth 2*, add the redirect URI `https://finora-finance-tracker-pwa.vercel.app/` (and `http://localhost:5173/` for local testing), and make sure *Allow public clients (Implicit Grant & PKCE)* is **Allowed**.
+3. **Permissions:** tick `files.content.read`, `files.content.write` and `account_info.read`, then *Submit*.
+4. Copy the **App key** and add it in Vercel as `VITE_DROPBOX_APP_KEY`. No secret is needed (PKCE). Redeploy.
+5. New Dropbox apps start in *development* status, which allows a limited number of linked users (shown in the app console); that is enough for personal and family use. Apply for production status if you need more.
+
+Leave a variable empty to hide that provider. For local testing put the same `VITE_*` values in `app/.env.local` (git-ignored) and `GOOGLE_CLIENT_SECRET` in your shell when running `npm run dev`.
+
