@@ -1,0 +1,207 @@
+import { describe, expect, it } from 'vitest';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import { parseCasLines, parseDematCas, parseMfCas } from './cas';
+import { parseBankSheet, parseHoldingsSheet } from './sheets';
+import { extractPdfLines } from './pdfText';
+import { parseInvestmentStatement } from './index';
+import { applyBankRows, applyStatement, prepareBankRows } from './apply';
+import { computePositions } from '../domain/portfolio';
+import { vault } from '../domain/testFixtures';
+import { ImportError } from './types';
+
+const CAMS = `
+Consolidated Account Statement
+01-Jan-2023 To 26-Oct-2026
+HDFC Mutual Fund
+Folio No: 1234567 / 89    KYC: OK  PAN: OK
+B205RG-HDFC Flexi Cap Fund - Direct Plan - Growth (Non-Demat) - ISIN: INF179K01UT0(Advisor: DIRECT) Registrar : CAMS
+Opening Unit Balance: 0.000
+05-Jan-2023  Purchase - Systematic Investment  5,000.00  4.000  1,250.00  4.000
+05-Jan-2023  *** Stamp Duty ***  0.25
+05-Feb-2023  Purchase - Systematic Investment  5,000.00  3.846  1,300.00  7.846
+10-Mar-2024  Redemption  (2,800.00)  (2.000)  1,400.00  5.846
+Closing Unit Balance: 5.846   NAV on 26-Oct-2026: INR 1,850.23   Total Cost Value: 7,323.00   Market Value on 26-Oct-2026: INR 10,816.44
+Folio No: 99887766  KYC: OK
+Parag Parikh Flexi Cap Fund - Direct Plan Growth (INF879O01027)
+Opening Unit Balance: 10.000
+05-Jan-2024  Purchase  10,000.00  20.000  500.00  30.000
+Closing Unit Balance: 30.000   NAV on 26-Oct-2026: INR 80.50   Total Cost Value: 15,000.00
+`.trim().split('\n');
+
+const CDSL = `
+CDSL Consolidated Account Statement as on 26-10-2026
+ISIN  Security  Current Bal  Market Value
+INE002A01018  RELIANCE INDUSTRIES LTD  10.000  29,500.00
+INE009A01021  INFOSYS LIMITED  25.000  45,250.00
+INE123A01011  DELISTED CO LTD  5.000  N.A.
+INF204KB14I2  NIPPON INDIA ETF NIFTY BEES  100.000  27,000.00
+`.trim().split('\n');
+
+describe('parseMfCas (CAMS/KFintech)', () => {
+  const res = parseMfCas(CAMS);
+
+  it('reads folios, scheme names, ISINs and the full transaction history', () => {
+    expect(res.holdings).toHaveLength(2);
+    const [hdfc, ppfas] = res.holdings;
+    expect(hdfc).toMatchObject({ isin: 'INF179K01UT0', folio: '1234567/89', units: '5.846', price: '1850.23', amc: 'HDFC Mutual Fund' });
+    expect(hdfc.name).toBe('HDFC Flexi Cap Fund - Direct Plan - Growth');
+    expect(hdfc.transactions.map(t => [t.date, t.kind, t.units, t.systematic])).toEqual([
+      ['2023-01-05', 'BUY', '4', true],
+      ['2023-02-05', 'BUY', '3.846', true],
+      ['2024-03-10', 'SELL', '2', false],
+    ]);
+    expect(hdfc.historyMismatch).toBeUndefined();
+    expect(ppfas.name).toBe('Parag Parikh Flexi Cap Fund - Direct Plan Growth');
+  });
+
+  it('flags a history that does not reach the closing balance', () => {
+    expect(res.holdings[1].historyMismatch).toBe(true);
+    expect(res.warnings.join(' ')).toContain('Parag Parikh');
+  });
+
+  it('is chosen automatically for CAMS statements', () => {
+    expect(parseCasLines(CAMS).source).toBe('CAS_MF');
+  });
+});
+
+describe('parseDematCas (CDSL/NSDL)', () => {
+  const res = parseDematCas(CDSL);
+
+  it('reads tabular rows, derives price from market value and skips N.A. rows', () => {
+    expect(res.holdings.map(h => [h.isin, h.type, h.units, h.price])).toEqual([
+      ['INE002A01018', 'STOCK', '10', '2950'],
+      ['INE009A01021', 'STOCK', '25', '1810'],
+      ['INF204KB14I2', 'ETF', '100', '270'],
+    ]);
+    expect(res.holdings[0].name).toBe('RELIANCE INDUSTRIES LTD');
+    expect(res.warnings.some(w => w.includes('DELISTED'))).toBe(true);
+    expect(res.statementDate).toBe('2026-10-26');
+  });
+
+  it('reads NSDL multi-line blocks', () => {
+    const nsdl = ['NSDL Consolidated Account Statement', 'HDFC BANK LIMITED', 'INE040A01034', 'Balance 12.000', 'Market Value 19,800.00'];
+    const [h] = parseDematCas(nsdl).holdings;
+    expect(h).toMatchObject({ name: 'HDFC BANK LIMITED', units: '12', price: '1650' });
+  });
+});
+
+function workbook(rows: (string | number)[][], bookType: XLSX.BookType = 'xlsx'): Uint8Array {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Holdings');
+  return new Uint8Array(XLSX.write(wb, { type: 'array', bookType }) as ArrayBuffer);
+}
+
+describe('broker holdings sheets', () => {
+  it('finds the header row under a preamble and maps Zerodha-style columns', () => {
+    const bytes = workbook([
+      ['Holdings statement for client AB1234'],
+      [],
+      ['Symbol', 'ISIN', 'Sector', 'Quantity Available', 'Average Price', 'Previous Closing Price'],
+      ['INFY', 'INE009A01021', 'IT', 25, 1500, 1810],
+      ['NIFTYBEES', 'INF204KB14I2', 'ETF', 100, 240.5, 270],
+      ['TOTAL', '', '', 125, '', ''],
+    ]);
+    const res = parseHoldingsSheet(bytes);
+    expect(res.holdings.map(h => [h.symbol, h.isin, h.type, h.units, h.avgCost, h.price])).toEqual([
+      ['INFY', 'INE009A01021', 'STOCK', '25', '1500', '1810'],
+      ['NIFTYBEES', 'INF204KB14I2', 'ETF', '100', '240.5', '270'],
+    ]);
+  });
+
+  it('reads CSV and merges the same security across accounts', () => {
+    const csv = new TextEncoder().encode('Instrument,Qty.,Avg. cost,LTP\nTCS,10,3000,4000\nTCS,10,3500,4000\n');
+    const [h] = parseHoldingsSheet(csv).holdings;
+    expect(h).toMatchObject({ name: 'TCS', units: '20', avgCost: '3250' });
+  });
+});
+
+describe('bank statements', () => {
+  it('reads debit/credit columns', () => {
+    const bytes = workbook([
+      ['HDFC BANK Ltd', 'Statement of account'],
+      ['Date', 'Narration', 'Chq./Ref.No.', 'Value Dt', 'Withdrawal Amt.', 'Deposit Amt.', 'Closing Balance'],
+      ['01/10/26', 'UPI-SWIGGY-swiggy@icici-123', '0001', '01/10/26', 450, '', 10000],
+      ['02/10/26', 'NEFT CR-ACME CORP-SALARY OCT', '0002', '02/10/26', '', 85000, 95000],
+    ]);
+    const res = parseBankSheet(bytes);
+    expect(res.bankName).toBe('HDFC');
+    expect(res.transactions.map(t => [t.date, t.kind, t.amount])).toEqual([
+      ['2026-10-01', 'EXPENSE', '450'],
+      ['2026-10-02', 'INCOME', '85000'],
+    ]);
+  });
+
+  it('reads a signed amount column with Dr/Cr type', () => {
+    const csv = new TextEncoder().encode('Transaction Date,Description,Amount,Dr/Cr\n05-10-2026,AMAZON PAY,1299.00,DR\n06-10-2026,INTEREST,12.50,CR\n');
+    const res = parseBankSheet(csv);
+    expect(res.transactions.map(t => t.kind)).toEqual(['EXPENSE', 'INCOME']);
+  });
+
+  it('categorises rows, flags duplicates on re-import, and adds entries once', () => {
+    const data = vault();
+    const rows = prepareBankRows(data, [{ date: '2026-10-01', narration: 'UPI-SWIGGY-123', amount: '450', kind: 'EXPENSE' }]);
+    expect(rows[0].category).toBe('Food');
+    const once = applyBankRows(data, rows, { ownerId: 'self', paymentMethod: 'UPI' });
+    expect(prepareBankRows(once.data, rows)[0].duplicate).toBe(true);
+  });
+});
+
+describe('applyStatement', () => {
+  it('imports transactions idempotently and replaces estimated SIP installments', () => {
+    const preview = parseMfCas(CAMS);
+    let data = vault();
+    const first = applyStatement(data, preview, preview.holdings, { ownerId: 'self', asOf: '2026-10-26' });
+    expect(first.holdingsAdded).toBe(2);
+    data = first.data;
+    const positions = computePositions(data, '2026-10-26');
+    const hdfc = positions.find(p => p.holding.isin === 'INF179K01UT0')!;
+    expect(hdfc.units.toNumber()).toBeCloseTo(5.846, 3);
+    expect(hdfc.realizedLots).toHaveLength(1);
+    expect(hdfc.xirr).not.toBeNull();
+    const ppfas = positions.find(p => p.holding.isin === 'INF879O01027')!;
+    expect(ppfas.units.toNumber()).toBe(30);
+
+    const again = applyStatement(data, preview, preview.holdings, { ownerId: 'self', asOf: '2026-10-26' });
+    expect(again.txnsAdded).toBe(0);
+    expect(again.holdingsAdded).toBe(0);
+  });
+
+  it('adds an adjusting transaction for holdings-only statements', () => {
+    const preview = parseDematCas(CDSL);
+    const res = applyStatement(vault(), preview, preview.holdings, { ownerId: 'spouse', asOf: '2026-10-26' });
+    const positions = computePositions(res.data, '2026-10-26');
+    expect(positions.find(p => p.holding.isin === 'INE002A01018')!.units.toNumber()).toBe(10);
+    expect(res.data.holdings.every(h => h.ownerId === 'spouse')).toBe(true);
+
+    const smaller = { ...preview, holdings: [{ ...preview.holdings[0], units: '4' }] };
+    const after = applyStatement(res.data, smaller, smaller.holdings, { ownerId: 'spouse', asOf: '2026-10-27' });
+    expect(computePositions(after.data, '2026-10-27').find(p => p.holding.isin === 'INE002A01018')!.units.toNumber()).toBe(4);
+  });
+});
+
+describe('PDF text extraction', () => {
+  function pdf(lines: string[], password?: string): Uint8Array {
+    const doc = new jsPDF(password ? { encryption: { userPassword: password, ownerPassword: password, userPermissions: ['print'] } } : {});
+    lines.forEach((l, i) => doc.text(l, 10, 20 + i * 8));
+    return new Uint8Array(doc.output('arraybuffer'));
+  }
+
+  it('returns lines in reading order', async () => {
+    const lines = await extractPdfLines(pdf(['Folio No: 123456', 'Closing Unit Balance: 10.000']));
+    expect(lines).toEqual(['Folio No: 123456', 'Closing Unit Balance: 10.000']);
+  });
+
+  it('asks for a password and rejects a wrong one', async () => {
+    const bytes = pdf(['secret'], 'abcde1234f01011990');
+    await expect(extractPdfLines(bytes)).rejects.toMatchObject({ code: 'PASSWORD_NEEDED' });
+    await expect(extractPdfLines(bytes, 'wrong')).rejects.toMatchObject({ code: 'PASSWORD_WRONG' });
+    expect(await extractPdfLines(bytes, 'abcde1234f01011990')).toEqual(['secret']);
+  });
+
+  it('routes PDFs to the CAS parser', async () => {
+    const res = await parseInvestmentStatement(pdf(['CDSL Consolidated Account Statement', 'INE002A01018  RELIANCE INDUSTRIES LTD  10.000  29,500.00']));
+    expect(res.holdings[0].isin).toBe('INE002A01018');
+    await expect(parseInvestmentStatement(new Uint8Array([1, 2, 3]))).rejects.toBeInstanceOf(ImportError);
+  });
+});
