@@ -191,7 +191,8 @@ export default function SettingsPage() {
 
       <Panel className="p-4 text-xs text-neutral-500 space-y-1">
         <p className="font-semibold text-neutral-700 dark:text-neutral-300">Privacy</p>
-        <p>Finora has no account and no server. Your data is encrypted (AES-256) in this app’s private storage. The only network requests fetch public fund NAVs (AMFI) and stock prices (Yahoo Finance); nothing about you is sent.</p>
+        <p>Finora has no account and no server. Your data is encrypted (AES-256) in this app’s private storage. The only network requests fetch public fund NAVs (AMFI) and stock prices (Yahoo Finance), plus your own Google Drive or Dropbox if you link one; nothing about you is sent.</p>
+        <a href="privacy.html" className="inline-block pt-1 font-semibold text-primary-600">Read the full privacy policy</a>
       </Panel>
 
       <Button variant="ghost" className="text-error-600" fullWidth iconLeft={<Trash2 size={18} />} onClick={() => setErase(true)}>Erase vault from this phone</Button>

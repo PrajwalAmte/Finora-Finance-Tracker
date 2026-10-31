@@ -66,6 +66,8 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,mjs,css,html,png,svg,webmanifest}'],
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           navigateFallback: 'index.html',
+          // Real pages and API routes must reach the network, not the app shell.
+          navigateFallbackDenylist: [/^\/privacy\.html$/, /^\/api\//],
           cleanupOutdatedCaches: true,
           // Price responses are cached by the app itself; the service worker never stores them.
           runtimeCaching: [],

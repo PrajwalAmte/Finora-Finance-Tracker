@@ -107,10 +107,11 @@ Why not iCloud or a shared link: a shared Drive/iCloud link is read-only, and iC
 
 1. Go to **console.cloud.google.com**, create a project (e.g. *Finora*).
 2. **APIs & Services → Library →** enable **Google Drive API**.
-3. **OAuth consent screen:** User type *External*; app name *Finora*; your email as support and developer contact; scopes: `.../auth/drive.file`, `openid`, `email` (all non-sensitive, so no Google verification review is needed). While the app is in *Testing*, only accounts listed under *Test users* can sign in, and Google expires their sign-in after 7 days (Finora will ask to sign in again). Click **Publish app** once it works; with only non-sensitive scopes this needs no review and removes the 7-day limit.
+3. **Branding** (Google Auth Platform → Branding): home page `https://finora-finance-tracker-sable.vercel.app`, privacy policy `https://finora-finance-tracker-sable.vercel.app/privacy.html`, authorised domain `finora-finance-tracker-sable.vercel.app` (no `https://`, no slash). Leave the logo empty: uploading one triggers a brand review. Branding must be complete before **Publish app** is enabled.
+   **OAuth consent screen:** User type *External*; app name *Finora*; your email as support and developer contact; scopes: `.../auth/drive.file`, `openid`, `email` (all non-sensitive, so no Google verification review is needed). While the app is in *Testing*, only accounts listed under *Test users* can sign in, and Google expires their sign-in after 7 days (Finora will ask to sign in again). Click **Publish app** once it works; with only non-sensitive scopes this needs no review and removes the 7-day limit.
 4. **Credentials → Create credentials → OAuth client ID →** type *Web application*.
-   - Authorised JavaScript origins: `https://finora-finance-tracker-pwa.vercel.app`
-   - Authorised redirect URIs: `https://finora-finance-tracker-pwa.vercel.app/` (with the trailing slash)
+   - Authorised JavaScript origins: `https://finora-finance-tracker-sable.vercel.app` (your production address; see Vercel → Project → Domains)
+   - Authorised redirect URIs: `https://finora-finance-tracker-sable.vercel.app/` (with the trailing slash)
    - Add `http://localhost:5173` and `http://localhost:5173/` too for local testing.
 5. Copy the **Client ID** and **Client secret**.
 6. In Vercel → Project → Settings → **Environment Variables** add:
@@ -124,7 +125,7 @@ The secret is needed because Google only gives long-lived refresh tokens to apps
 ### Setting up Dropbox (free, about 5 minutes)
 
 1. Go to **dropbox.com/developers/apps → Create app**: *Scoped access*, *App folder*, name *Finora* (or any free name).
-2. **Settings:** under *OAuth 2*, add the redirect URI `https://finora-finance-tracker-pwa.vercel.app/` (and `http://localhost:5173/` for local testing), and make sure *Allow public clients (Implicit Grant & PKCE)* is **Allowed**.
+2. **Settings:** under *OAuth 2*, add the redirect URI `https://finora-finance-tracker-sable.vercel.app/` (and `http://localhost:5173/` for local testing), and make sure *Allow public clients (Implicit Grant & PKCE)* is **Allowed**.
 3. **Permissions:** tick `files.content.read`, `files.content.write` and `account_info.read`, then *Submit*.
 4. Copy the **App key** and add it in Vercel as `VITE_DROPBOX_APP_KEY`. No secret is needed (PKCE). Redeploy.
 5. New Dropbox apps start in *development* status, which allows a limited number of linked users (shown in the app console); that is enough for personal and family use. Apply for production status if you need more.

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Finora privacy policy</title>
+    <meta name="description" content="How Finora handles your data: it stays encrypted on your device. No account, no server, no tracking." />
+    <link rel="icon" type="image/png" href="icons/favicon-64.png" />
+    <style>
+      :root {
+        --bg: #f6f6fa;
+        --card: #ffffff;
+        --ink: #14141d;
+        --muted: #5b5b6e;
+        --line: #e0e0ea;
+        --accent: #6249e3;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0b12;
+          --card: #14141d;
+          --ink: #ededf3;
+          --muted: #9a9aad;
+          --line: rgba(255, 255, 255, 0.08);
+          --accent: #a6a8fd;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        -webkit-text-size-adjust: 100%;
+      }
+      main { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; }
+      header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+      header img { width: 44px; height: 44px; border-radius: 11px; }
+      h1 { font-size: 28px; line-height: 1.2; margin: 0; letter-spacing: -0.02em; }
+      .meta { color: var(--muted); font-size: 14px; margin: 4px 0 0; }
+      .summary { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; margin: 24px 0 32px; }
+      .summary ul { margin: 8px 0 0; padding-left: 20px; }
+      h2 { font-size: 19px; margin: 32px 0 8px; letter-spacing: -0.01em; }
+      p, li { color: var(--ink); }
+      .muted { color: var(--muted); }
+      a { color: var(--accent); }
+      table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 8px 0; }
+      th, td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+      th { font-weight: 600; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+      code { font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="icons/icon-192.png" alt="" />
+        <div>
+          <h1>Privacy policy</h1>
+          <p class="meta">Finora · Effective 31 October 2026</p>
+        </div>
+      </header>
+
+      <div class="summary">
+        <strong>In short</strong>
+        <ul>
+          <li>Finora has no accounts and no database of users. Your financial data stays on your device, encrypted with your passphrase.</li>
+          <li>We do not collect, sell or share personal data, and the app contains no analytics, advertising or tracking code.</li>
+          <li>If you choose to link Google Drive or Dropbox, Finora saves one encrypted file to <em>your</em> account. Nobody without your passphrase can read it, including us and the provider.</li>
+        </ul>
+      </div>
+
+      <h2>Who we are</h2>
+      <p>Finora is a personal finance app for tracking investments, SIPs, loans, spending and capital-gains tax. It is available as an installable web app and as Android and iOS apps. Questions about this policy: <a href="mailto:prajwalamte@gmail.com">prajwalamte@gmail.com</a>.</p>
+
+      <h2>What data Finora handles and where it is kept</h2>
+      <p>Everything you enter or import (holdings, transactions, loans, expenses, goals, family members, settings) is stored only on your device, in a vault file encrypted with AES-256-GCM. The encryption key is derived from your passphrase; we never receive the passphrase, the key or the data.</p>
+      <ul>
+        <li><strong>Web app:</strong> the vault is kept in your browser’s storage for this site.</li>
+        <li><strong>Android and iOS apps:</strong> the vault is kept in the app’s private storage. On iOS it may be included, still encrypted, in your device backup.</li>
+        <li><strong>Biometric unlock</strong> (optional, apps only): a copy of the vault key is kept in the device’s secure keychain/keystore and released only after Face ID, Touch ID or fingerprint. Biometric data itself is handled by your phone and never reaches Finora.</li>
+      </ul>
+
+      <h2>Network connections</h2>
+      <p>Finora works offline. It connects to the internet only for the following:</p>
+      <table>
+        <thead><tr><th>When</th><th>Where</th><th>What is sent</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Fund search and NAV refresh</td>
+            <td>AMFI (portal.amfiindia.com)</td>
+            <td>A request for the public daily NAV file. Nothing about you or your holdings.</td>
+          </tr>
+          <tr>
+            <td>Stock price refresh</td>
+            <td>Yahoo Finance (query1.finance.yahoo.com)</td>
+            <td>The stock symbols being priced (for example <code>INFY.NS</code>). No account or personal details.</td>
+          </tr>
+          <tr>
+            <td>Web app only</td>
+            <td>Finora’s own site on Vercel</td>
+            <td>Browsers cannot call AMFI or Yahoo directly, so the web app asks its own site to relay those two requests. The relay stores nothing. Like any website, the hosting provider (Vercel) may keep standard technical request logs such as IP address and time.</td>
+          </tr>
+          <tr>
+            <td>Cloud vault (optional)</td>
+            <td>Google Drive or Dropbox</td>
+            <td>Your encrypted vault file, only after you link an account. See below.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Cloud vault with Google Drive or Dropbox (optional)</h2>
+      <p>In the web app you can link Google Drive or Dropbox to keep an encrypted copy of your vault and sync between devices.</p>
+      <ul>
+        <li>Finora stores a single file named <code>Finora vault.finora-sync</code>. Its contents are encrypted on your device before upload; the provider only stores unreadable data.</li>
+        <li><strong>Google Drive:</strong> Finora requests the <code>drive.file</code> permission, which only allows access to files Finora itself created, plus your email address (<code>openid</code>, <code>email</code>) to show which account is linked. Finora cannot see or change any other file in your Drive.</li>
+        <li><strong>Dropbox:</strong> Finora uses an app folder (<code>Apps/Finora/</code>) and cannot access the rest of your Dropbox.</li>
+        <li>Sign-in tokens are stored on your device only, encrypted with your vault key, and are never synced or exported. For Google, a single step (exchanging the sign-in code for tokens) passes through Finora’s site because Google requires a server-held secret for it; the tokens are passed back to your device and are not stored or logged there.</li>
+        <li>You can unlink at any time in Settings → Cloud vault, and revoke access from your Google account (Security → Third-party apps) or Dropbox settings (Connected apps). Deleting the file in Drive or Dropbox deletes the cloud copy.</li>
+      </ul>
+      <p>Finora’s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements. Google user data is used only to store and read your own encrypted vault file and is never used for advertising, sold, or shared.</p>
+
+      <h2>Optional device permissions</h2>
+      <ul>
+        <li><strong>Notifications:</strong> reminders for EMIs, SIPs and bills, created and delivered on your device.</li>
+        <li><strong>Photos / files:</strong> to import statements and to read payment screenshots. Text is recognised on the device (Apple Vision or Google ML Kit); images are not uploaded.</li>
+        <li><strong>SMS (Android, optional):</strong> when you tap “From SMS”, bank and payment messages are read on the device to find transactions. Messages are not stored or sent anywhere; only the expenses you choose to add are saved in your vault. On iPhone, the optional Shortcuts automation hands a message to Finora on the device in the same way.</li>
+        <li><strong>Statement passwords</strong> are used only to open the file on your device and are not saved.</li>
+      </ul>
+
+      <h2>What we do not do</h2>
+      <ul>
+        <li>No accounts, sign-up or user database.</li>
+        <li>No analytics, crash-reporting SDKs, advertising, or tracking cookies.</li>
+        <li>No sale or sharing of personal data.</li>
+      </ul>
+      <p class="muted">App stores may give developers aggregated, anonymous crash and usage statistics when you have opted in to share them with developers in your phone’s settings. These contain no financial data.</p>
+
+      <h2>Your control over your data</h2>
+      <ul>
+        <li><strong>Export:</strong> Settings → Backup and sync creates an encrypted file you can keep anywhere.</li>
+        <li><strong>Delete:</strong> Settings → Erase vault removes all Finora data from the device. Deleting the app (or the home-screen web app) also deletes it. Delete any exported files or the cloud copy yourself.</li>
+        <li>Because we hold no copy of your data, we cannot recover it for you. Keep your recovery code and a recent backup.</li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>Finora is not directed at children under 13 and does not knowingly process their data.</p>
+
+      <h2>Tax and financial information</h2>
+      <p>Tax figures, harvesting suggestions and projections are estimates calculated on your device to help you plan. They are not financial, investment or tax advice.</p>
+
+      <h2>Changes to this policy</h2>
+      <p>If this policy changes, the updated version will be published at this address with a new effective date.</p>
+
+      <p class="muted"><a href="./">← Back to Finora</a></p>
+    </main>
+  </body>
+</html>
