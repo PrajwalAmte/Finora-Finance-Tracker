@@ -57,7 +57,7 @@ describe('parseMfCas (CAMS/KFintech)', () => {
 
   it('flags a history that does not reach the closing balance', () => {
     expect(res.holdings[1].historyMismatch).toBe(true);
-    expect(res.warnings.join(' ')).toContain('Parag Parikh');
+    expect(res.warnings.join(' ')).toContain('1 of 2 funds were bought before that');
   });
 
   it('is chosen automatically for CAMS statements', () => {
@@ -203,6 +203,75 @@ describe('PDF text extraction', () => {
     const res = await parseInvestmentStatement(pdf(['CDSL Consolidated Account Statement', 'INE002A01018  RELIANCE INDUSTRIES LTD  10.000  29,500.00']));
     expect(res.holdings[0].isin).toBe('INE002A01018');
     await expect(parseInvestmentStatement(new Uint8Array([1, 2, 3]))).rejects.toBeInstanceOf(ImportError);
+  });
+});
+
+// Shape of a real CAMS "period" statement (1 Apr to 1 Nov): a wrapped scheme name, a fund house
+// heading without "Mutual Fund", opening balances, and a folio with no transactions in the period.
+const PERIOD_STATEMENT = [
+  'Consolidated Account Statement',
+  '01-Apr-2025 To 01-Nov-2026',
+  'ICICI Prudential Mutual Fund',
+  'Folio No: 1234567 / 99  PAN: ABCDE1234F  KYC: OK PAN: OK',
+  'Jane Doe',
+  'P9999-ICICI Prudential Large Cap Fund (erstwhile Bluechip Fund) - Direct Plan - Growth (formerly ICICI Prudential Focused Bluechip Equity  Registrar : CAMS',
+  'Fund) (Non-Demat) - ISIN: INF109K016L0(Advisor: DIRECT)',
+  'Opening Unit Balance: 100.000',
+  '05-Apr-2025 SIP Purchase - Instalment 10/120 - DIRECT  5,000.00  50.000  100.00  150.000',
+  '05-Apr-2025 *** Stamp Duty ***  0.25',
+  'Page 2 of 4',
+  'Consolidated Account Statement',
+  '01-Apr-2025 To 01-Nov-2026',
+  'Date  Transaction  Amount  Units  Price  Unit',
+  'Closing Unit Balance: 150.000  NAV on 31-Oct-2026: INR 120.00  Total Cost Value: 15,000.00  Market Value on 31-Oct-2026: INR 18,000.00',
+  'Current: Entry Load - NIL for all transactions, including, SIP / STPs accepted by the Fund.',
+  'Folio No: 7654321 / 9  PAN: ABCDE1234F  KYC: OK PAN: OK',
+  'Jane Doe',
+  'P1234-ICICI Prudential Healthcare Fund - Direct Plan - Growth (Non-Demat) - ISIN: INF109KC1GH2(Advisor: DIRECT)  Registrar : CAMS',
+  'Opening Unit Balance: 200.000',
+  '*** No transactions during this statement period ***',
+  'Closing Unit Balance: 200.000  NAV on 31-Oct-2026: INR 50.00  Total Cost Value: 8,000.00  Market Value on 31-Oct-2026: INR 10,000.00',
+  'Quant MF',
+  'Folio No: 99999999999 / 9  PAN: ABCDE1234F  PAN: OK',
+  'JANE DOE',
+  '999IBDGG-quant Small Cap Fund - Direct Plan (Demat) - ISIN: INF966L01689(Advisor: INZ000031633)  Registrar :',
+  'KFINTECH',
+  'Opening Unit Balance: 0.000',
+  '05-Apr-2025 Additional Purchase  4,000.00  20.000  200.0000  20.000',
+  'Closing Unit Balance: 20.000  NAV on 31-Oct-2026: INR 250.0000  Total Cost Value: 4,000.00  Market Value on 31-Oct-2026: INR 5,000.00',
+];
+
+describe('a CAMS period statement', () => {
+  const res = parseMfCas(PERIOD_STATEMENT);
+
+  it('reads the period, wrapped scheme names, and the right fund house for each folio', () => {
+    expect(res.periodStart).toBe('2025-04-01');
+    expect(res.statementDate).toBe('2026-11-01');
+    expect(res.holdings.map(h => [h.name, h.amc, h.units])).toEqual([
+      ['ICICI Prudential Large Cap Fund (erstwhile Bluechip Fund) - Direct Plan - Growth (formerly ICICI Prudential Focused Bluechip Equity Fund)', 'ICICI Prudential Mutual Fund', '150'],
+      ['ICICI Prudential Healthcare Fund - Direct Plan - Growth', 'ICICI Prudential Mutual Fund', '200'],
+      ['quant Small Cap Fund - Direct Plan', 'Quant MF', '20'],
+    ]);
+  });
+
+  it('flags funds held before the period, with one plain-language warning', () => {
+    expect(res.holdings.map(h => h.openingUnits)).toEqual(['100', '200', undefined]);
+    expect(res.warnings[0]).toContain('2 of 3 funds were bought before that');
+    expect(res.warnings[0]).toContain('since inception');
+  });
+
+  it('dates earlier units the day before the period and costs them from the statement, not from today', () => {
+    const out = applyStatement(vault(), res, res.holdings, { ownerId: 'self' });
+    const byUnits = (u: string) => out.data.txns.filter(t => t.units === u);
+    // Large Cap: opening 100 units = total cost 15,000 less the 5,000 bought in the period → 10,000.
+    const [open] = byUnits('100');
+    expect(open).toMatchObject({ date: '2025-03-31', kind: 'BUY', amount: '10000', source: 'IMPORT' });
+    // Healthcare had no transactions: its 200 units are one buy at cost, dated before the period.
+    expect(byUnits('200')[0]).toMatchObject({ date: '2025-03-31', amount: '8000' });
+    // A fund bought entirely inside the period gets no opening transaction.
+    expect(out.data.txns.filter(t => t.date === '2025-03-31')).toHaveLength(2);
+    const again = applyStatement(out.data, res, res.holdings, { ownerId: 'self' });
+    expect(again.txnsAdded).toBe(0);
   });
 });
 

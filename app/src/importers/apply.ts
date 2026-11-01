@@ -57,6 +57,9 @@ export function applyStatement(
   opts: { ownerId: string; nav?: NavLookup; asOf?: ISODate },
 ): ApplyStatementResult {
   const asOf = opts.asOf ?? preview.statementDate ?? today();
+  // Units held before a period statement began have no dates in the file; the day before the period
+  // is the most honest date (long-term unless proven otherwise) and keeps XIRR from starting too late.
+  const openingDate = preview.periodStart ? addDays(preview.periodStart, -1) : undefined;
   const holdingUpdates: Holding[] = [];
   const newTxns: Txn[] = [];
   const replaced: Txn[] = [];
@@ -114,9 +117,14 @@ export function applyStatement(
         const openId = `imp-open-${stableHash(`${h.id}|${p.transactions.reduce((m, t) => (t.date < m ? t.date : m), p.transactions[0].date)}`)}`;
         if (gap.gt(0.001) && !ids.has(openId)) {
           const firstDate = p.transactions.reduce((m, t) => (t.date < m ? t.date : m), p.transactions[0].date);
-          const cost = p.avgCost ? D(p.avgCost) : D(p.transactions[0].price);
+          // Cost of the opening units: the statement's total cost of what is held now, less what the
+          // period's own purchases cost. With redemptions in the period that can come out too low, so
+          // it falls back to the average cost.
+          const periodBuys = p.transactions.reduce((sum, t) => (t.kind === 'BUY' ? sum.plus(t.amount) : sum), D(0));
+          const openCost = p.avgCost ? D(p.avgCost).times(p.units).minus(periodBuys) : D(0);
+          const cost = openCost.gt(0) ? openCost.div(gap) : p.avgCost ? D(p.avgCost) : D(p.transactions[0].price);
           newTxns.push(create<Txn>({
-            id: openId, holdingId: h.id, date: addDays(firstDate, -1), kind: 'BUY',
+            id: openId, holdingId: h.id, date: openingDate ?? addDays(firstDate, -1), kind: 'BUY',
             units: units(gap), price: price(cost), amount: dec(gap.times(cost)), source: 'IMPORT',
           }));
         }
@@ -141,7 +149,7 @@ export function applyStatement(
           : D(p.price ?? latest ?? position.avgCost);
         newTxns.push(create<Txn>({
           id: `imp-adj-${stableHash(`${h.id}|${asOf}|${p.units}`)}`,
-          holdingId: h.id, date: asOf, kind: diff.gt(0) ? 'BUY' : 'SELL',
+          holdingId: h.id, date: diff.gt(0) && p.openingUnits && openingDate ? openingDate : asOf, kind: diff.gt(0) ? 'BUY' : 'SELL',
           units: units(diff.abs()), price: price(px), amount: dec(diff.abs().times(px)), source: 'IMPORT',
         }));
       }

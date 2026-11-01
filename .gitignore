@@ -75,3 +75,6 @@ src/main/resources/application-dev.properties
 
 # Real statements used for accuracy testing (never commit)
 app/testdata/private/
+
+# Output of tools/inspect-statement (masked statement text and parse reports)
+app/tools/out/

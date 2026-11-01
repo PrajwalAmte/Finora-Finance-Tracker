@@ -44,6 +44,10 @@ function equityType(isin: string, name: string): AssetType {
 const TXN_LINE = /^(\d{1,2}-[A-Za-z]{3}-\d{4})\s+(.+?)\s+(\(?-?[\d,]+\.\d+\)?)\s+(\(?-?[\d,]+\.\d+\)?)\s+([\d,]+\.\d+)\s+(\(?-?[\d,]+\.\d+\)?)\s*$/;
 const AMOUNT_ONLY_LINE = /^(\d{1,2}-[A-Za-z]{3}-\d{4})\s+(.+?)\s+(\(?-?[\d,]+\.\d+\)?)\s*$/;
 
+/** Scheme lines start with a short registrar code: "B205RG-HDFC Flexi Cap Fund…". */
+const SCHEME_CODE = /^[A-Z0-9]{2,8}\s*-\s*\S/;
+const PERIOD = /(\d{1,2}-[A-Za-z]{3}-\d{4})\s+to\s+(\d{1,2}-[A-Za-z]{3}-\d{4})/i;
+
 const SCHEME_SUFFIX = /\s*(?:\((?:non-demat|demat)\)|\(advisor[^)]*\)|registrar\s*:.*|-)\s*$/i;
 
 function schemeNameFrom(line: string, isin: string): string {
@@ -72,14 +76,25 @@ export function parseMfCas(lines: string[]): StatementPreview {
   let amc: string | undefined;
   let current: ParsedHolding | null = null;
   let closingUnits: Decimal | null = null;
+  let openingUnits: Decimal | null = null;
   let totalCost: Decimal | null = null;
+
+  const periodMatch = lines.slice(0, 60).join('\n').match(PERIOD);
+  const periodStart = periodMatch ? parseLooseDate(periodMatch[1]) : undefined;
+  const periodEnd = periodMatch ? parseLooseDate(periodMatch[2]) : undefined;
+  const earlier: string[] = [];
 
   const finish = () => {
     if (!current) return;
     const net = current.transactions.reduce((s, t) => (t.kind === 'BUY' ? s.plus(t.units) : t.kind === 'SELL' ? s.minus(t.units) : s), ZERO);
     if (closingUnits !== null) current.units = units(closingUnits);
     else current.units = units(net);
-    if (current.transactions.length && closingUnits !== null && net.minus(closingUnits).abs().gt(0.01)) {
+    if (openingUnits && openingUnits.gt(0.0005)) {
+      // Units that were already held when the statement period began: their dates are not in the file.
+      current.openingUnits = units(openingUnits);
+      current.historyMismatch = true;
+      earlier.push(current.name);
+    } else if (current.transactions.length && closingUnits !== null && net.minus(closingUnits).abs().gt(0.01)) {
       current.historyMismatch = true;
       warnings.push(`${current.name}: transactions add up to ${net.toFixed(3)} units but the closing balance is ${closingUnits.toFixed(3)}. The statement period may not start at your first purchase; an opening balance will be added.`);
     }
@@ -87,6 +102,7 @@ export function parseMfCas(lines: string[]): StatementPreview {
     if (D(current.units).gt(0) || current.transactions.length) holdings.push(current);
     current = null;
     closingUnits = null;
+    openingUnits = null;
     totalCost = null;
   };
 
@@ -100,6 +116,10 @@ export function parseMfCas(lines: string[]): StatementPreview {
     const folioMatch = line.match(/folio\s*(?:no)?\.?\s*[:-]?\s*([\w/ ]{4,30}?)(?:\s{2,}|\s+(?:kyc|pan|nominee)\b|$)/i);
     if (folioMatch && !ISIN.test(line)) {
       finish();
+      // The fund house heads its first folio ("Quant MF", "SBI Mutual Fund"); later folios of the same
+      // house are preceded by footnotes, so only a short heading line right above counts.
+      const above = lines[i - 1]?.trim() ?? '';
+      if (above.length <= 45 && /\b(mutual fund|mf|asset management)\b/i.test(above)) amc = above;
       folio = folioMatch[1].replace(/\s+/g, '').trim();
       continue;
     }
@@ -109,11 +129,23 @@ export function parseMfCas(lines: string[]): StatementPreview {
       finish();
       const isin = isinMatch[1];
       let name = schemeNameFrom(line, isin);
-      if (name.length < 6 && lines[i - 1]) name = schemeNameFrom(`${lines[i - 1].trim()} ${name}`, isin);
+      const above = lines[i - 1]?.trim() ?? '';
+      // A long scheme name wraps: the registrar code and first half sit on the line above the ISIN.
+      const wrapped = above && !ISIN.test(above) && SCHEME_CODE.test(above) && !SCHEME_CODE.test(line);
+      if (wrapped || (name.length < 6 && above)) {
+        const head = above.replace(/\s*registrar\s*:?\s*\S*\s*$/i, '');
+        name = schemeNameFrom(`${head} ${line}`, isin);
+      }
       current = { type: 'MUTUAL_FUND', name, isin, folio, amc, units: '0', transactions: [] };
       continue;
     }
     if (!current) continue;
+
+    if (/opening\s+(?:unit\s+)?balance/i.test(line)) {
+      const nums = numbers(line.split(/balance\s*:?/i)[1] ?? '');
+      if (nums.length) openingUnits = nums[0].abs();
+      continue;
+    }
 
     if (/closing\s+(?:unit\s+)?balance/i.test(line)) {
       const after = line.split(/closing\s+(?:unit\s+)?balance\s*:?/i)[1] ?? '';
@@ -162,8 +194,11 @@ export function parseMfCas(lines: string[]): StatementPreview {
   }
   finish();
 
+  if (earlier.length > 0 && periodStart) {
+    warnings.unshift(`This statement starts on ${periodStart}, and ${earlier.length} of ${holdings.length} funds were bought before that, so their purchase dates are not in the file. Returns and tax for those units will be approximate. For exact numbers, request a "since inception" statement from CAMS.`);
+  }
   if (holdings.length === 0) warnings.push('No mutual fund folios were found. Check that this is a CAMS or KFintech consolidated account statement.');
-  return { source: 'CAS_MF', holdings, warnings, statementDate: statementDate(lines.join('\n')) };
+  return { source: 'CAS_MF', holdings, warnings, statementDate: periodEnd ?? statementDate(lines.join('\n')), periodStart };
 }
 
 // ── CDSL / NSDL depository CAS (holdings only) ──────────────────────────────
@@ -277,5 +312,6 @@ export function parseCasLines(lines: string[]): StatementPreview {
     holdings: [...demat.holdings.filter(h => !mfIsins.has(h.isin)), ...mf.holdings],
     warnings: [...demat.warnings, ...mf.warnings.filter(w => !w.startsWith('No mutual fund'))],
     statementDate: demat.statementDate ?? mf.statementDate,
+    periodStart: mf.periodStart,
   };
 }

@@ -29,6 +29,8 @@ export interface ParsedHolding {
   transactions: ParsedTxn[];
   /** Units implied by the transactions differ from the closing balance (history incomplete). */
   historyMismatch?: boolean;
+  /** Units held before the statement period started (CAMS "Opening Unit Balance"). Their purchase dates are not in the file. */
+  openingUnits?: string;
 }
 
 export type StatementSource = 'CAS_MF' | 'CAS_DEMAT' | 'BROKER_SHEET';
@@ -38,6 +40,8 @@ export interface StatementPreview {
   holdings: ParsedHolding[];
   warnings: string[];
   statementDate?: ISODate;
+  /** First day covered, for period statements. Units bought earlier have no dates in the file. */
+  periodStart?: ISODate;
 }
 
 export interface ParsedBankTxn {

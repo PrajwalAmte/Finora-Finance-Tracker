@@ -1411,6 +1411,9 @@ pdf.js's regular build assumes a very recent browser (it calls `Uint8Array.proto
 ### Test PDFs must fit the page
 pdf.js leaves out text that runs past the page edge. A generated test PDF with long lines at the default 16pt silently lost the end of every line, so a correct parser "found nothing". Use a small font (7pt) for fixtures, and add at least one test that goes all the way from PDF bytes to parsed folios.
 
+### Debug real statements without seeing them
+A local tool (`tools/inspect-statement.test.ts`) opens the user's password-protected PDF on their own machine and writes a *masked* copy: digits become 9, PAN/email/phone are replaced, and only structural lines (folio, scheme, transactions, totals) keep their words. The masked file still parses, so the real layout can be tested without anyone's data leaving the machine. It exposed three bugs synthetic text never would: a scheme name wrapped over two lines, a fund-house heading that was not "…Mutual Fund", and period statements whose "Opening Unit Balance" units have no purchase dates. Masking can distort what you see (every opening balance became 999.999 and looked non-zero), so read results as structure, not values.
+
 ### Idempotent import
 Imported transactions get IDs hashed from their content, and "estimated" SIP installments within a few days and ~2% of a real one are replaced by it.
 
