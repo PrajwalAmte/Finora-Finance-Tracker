@@ -8,7 +8,7 @@ import { useData, useStore } from '../vault';
 import { D } from '../../domain/money';
 import { today } from '../../domain/dates';
 import { live, remove } from '../../domain/records';
-import { applyPrepayment, remainingSchedule, totals, type PrepayMode } from '../../domain/loans';
+import { accrueBalance, applyPrepayment, inMoratorium, remainingSchedule, totals, type PrepayMode } from '../../domain/loans';
 import { removeWithUndo } from '../actions';
 import { day } from '../format';
 import { toast } from '../toast';
@@ -30,6 +30,7 @@ export default function LoanPage() {
   const events = useMemo(() => live(data.loanEvents).filter(e => e.loanId === id).sort((a, b) => b.date.localeCompare(a.date)), [data.loanEvents, id]);
   if (!loan) return <Screen title="Not found" back><p className="text-neutral-500">This loan was deleted.</p></Screen>;
   const t = totals(sched);
+  const waiting = inMoratorium(loan);
 
   const record = () => {
     const res = applyPrepayment(loan, amount, date, mode);
@@ -54,8 +55,11 @@ export default function LoanPage() {
       <HeroCard>
         <div className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">Outstanding as of {day(loan.balanceAsOf)}</div>
         <div className="font-display text-[36px] leading-tight font-extrabold tracking-[-0.03em] mt-1"><Money value={loan.balance} /></div>
+        {waiting && loan.firstEmiDate && (
+          <p className="text-xs text-neutral-500 mt-2">Repayment starts {day(loan.firstEmiDate)}. Interest is building up: about <Money value={accrueBalance(loan, loan.firstEmiDate)} /> by then. Record prepayments as you make them.</p>
+        )}
         <div className="grid grid-cols-3 gap-3 mt-4">
-          <Stat label="EMI" value={<Money value={loan.emi} />} sub={<span className="text-neutral-500">on day {loan.emiDay}</span>} />
+          <Stat label="EMI" value={<Money value={loan.emi} />} sub={<span className="text-neutral-500">{waiting ? `from ${day(loan.firstEmiDate!, 'MMM yyyy')}` : `on day ${loan.emiDay}`}</span>} />
           <Stat label="Months left" value={loan.closedAt ? 'Closed' : t.months} sub={sched.length ? <span className="text-neutral-500">ends {day(sched[sched.length - 1].date, 'MMM yyyy')}</span> : undefined} />
           <Stat label="Interest still to pay" value={<Money value={t.interest} short />} />
         </div>

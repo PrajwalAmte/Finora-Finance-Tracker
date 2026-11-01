@@ -21,7 +21,7 @@ export function calendar(data: VaultData, from: ISODate, to: ISODate): CalendarI
 
   for (const loan of live(data.loans)) {
     if (loan.closedAt || D(loan.balance).lte(0)) continue;
-    for (const date of monthlyOccurrences(loan.emiDay, from, to)) {
+    for (const date of monthlyOccurrences(loan.emiDay, from, to, loan.firstEmiDate)) {
       items.push({ date, kind: 'EMI', title: loan.name, amount: D(loan.emi), refId: loan.id, outflow: true });
     }
   }
@@ -48,7 +48,8 @@ export function calendar(data: VaultData, from: ISODate, to: ISODate): CalendarI
 }
 
 export function upcoming(data: VaultData, days: number, asOf: ISODate = today()): CalendarItem[] {
-  return calendar(data, addDays(asOf, -1), addDays(asOf, days));
+  // `days` days starting today: 30 days never reaches the same day next month.
+  return calendar(data, addDays(asOf, -1), addDays(asOf, days - 1));
 }
 
 export interface SafeToSpend {

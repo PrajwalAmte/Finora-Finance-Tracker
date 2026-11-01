@@ -326,9 +326,9 @@ export const SelectField: React.FC<{ label: string; value: string; onChange: (v:
   </Field>
 );
 
-export const DateField: React.FC<{ label: string; value: string; onChange: (v: string) => void; max?: string; hint?: string }> = ({ label, value, onChange, max, hint }) => (
+export const DateField: React.FC<{ label: string; value: string; onChange: (v: string) => void; min?: string; max?: string; hint?: string }> = ({ label, value, onChange, min, max, hint }) => (
   <Field label={label} hint={hint}>
-    {id => <input id={id} type="date" value={value} max={max} onChange={e => onChange(e.target.value)} className={cx(fieldClass, 'dark:[color-scheme:dark]')} />}
+    {id => <input id={id} type="date" value={value} min={min} max={max} onChange={e => onChange(e.target.value)} className={cx(fieldClass, 'dark:[color-scheme:dark]')} />}
   </Field>
 );
 

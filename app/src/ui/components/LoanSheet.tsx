@@ -28,6 +28,7 @@ export const LoanSheet: React.FC<{ open: boolean; onClose: () => void; loan?: Lo
   const [emi, setEmi] = useState('');
   const [emiDay, setEmiDay] = useState('5');
   const [balance, setBalance] = useState('');
+  const [firstEmi, setFirstEmi] = useState('');
   const [interestType, setInterestType] = useState<InterestType>('COMPOUND');
   const [compounding, setCompounding] = useState<Compounding>('MONTHLY');
   const [accountRef, setAccountRef] = useState('');
@@ -37,7 +38,7 @@ export const LoanSheet: React.FC<{ open: boolean; onClose: () => void; loan?: Lo
     if (!open) return;
     setName(loan?.name ?? ''); setLender(loan?.lender ?? ''); setPrincipal(loan?.principal ?? ''); setRate(loan?.annualRate ?? '');
     setTenure(loan ? String(loan.tenureMonths) : ''); setStart(loan?.startDate ?? today()); setEmi(loan?.emi ?? '');
-    setEmiDay(String(loan?.emiDay ?? 5)); setBalance(''); setInterestType(loan?.interestType ?? 'COMPOUND');
+    setEmiDay(String(loan?.emiDay ?? 5)); setBalance(''); setFirstEmi(loan?.firstEmiDate ?? ''); setInterestType(loan?.interestType ?? 'COMPOUND');
     setCompounding(loan?.compounding ?? 'MONTHLY'); setAccountRef(loan?.accountRef ?? ''); setOwnerId(loan?.ownerId ?? SELF_OWNER_ID);
   }, [open, loan]);
 
@@ -45,10 +46,11 @@ export const LoanSheet: React.FC<{ open: boolean; onClose: () => void; loan?: Lo
   const computedEmi = D(principal).gt(0) && D(rate).gte(0) && months > 0 ? emiFor(principal, monthlyRate(rate, interestType, compounding), months) : null;
   const valid = name.trim() && D(principal).gt(0) && months > 0 && Number(emiDay) >= 1 && Number(emiDay) <= 31;
   const started = start < today();
+  const waiting = !!firstEmi && firstEmi > today();
 
   const submit = () => {
     if (!valid) return;
-    const base = newLoanFields({ principal, annualRate: rate || '0', tenureMonths: months, startDate: start, interestType, compounding, emi: emi || undefined, emiDay: Number(emiDay) });
+    const base = newLoanFields({ principal, annualRate: rate || '0', tenureMonths: months, startDate: start, interestType, compounding, emi: emi || undefined, emiDay: Number(emiDay), firstEmiDate: firstEmi || undefined });
     const fields = { ...base, name: name.trim(), lender: lender.trim() || undefined, accountRef: accountRef.trim() || undefined, ownerId };
     if (loan) {
       // Keep the tracked balance unless the user typed a fresh one.
@@ -83,6 +85,8 @@ export const LoanSheet: React.FC<{ open: boolean; onClose: () => void; loan?: Lo
         <AmountField label="EMI" value={emi} onChange={setEmi} hint={computedEmi ? `Calculated ${inr(computedEmi)}` : undefined} />
         <TextField label="EMI day" inputMode="numeric" value={emiDay} onChange={v => setEmiDay(v.replace(/\D/g, '').slice(0, 2))} />
       </div>
+      <DateField label="First EMI date (only if repayment has not started)" value={firstEmi} onChange={setFirstEmi} min={start} />
+      {waiting && <p className="text-xs text-neutral-500 -mt-2">Moratorium: no EMIs before this date. Interest keeps building at the loan rate and joins the balance when repayment starts. Enter the outstanding your bank shows, including any prepayments you made.</p>}
       {(started || loan) && (
         <AmountField label={loan ? 'Correct outstanding balance (optional)' : 'Outstanding today (from your bank app)'} value={balance} onChange={setBalance} hint={loan ? `Tracked: ${inr(loan.balance)} as of ${loan.balanceAsOf}` : 'Leave empty to calculate it from the EMIs since the start date.'} />
       )}

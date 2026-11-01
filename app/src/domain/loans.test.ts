@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { D } from './money';
 import { setClock } from './dates';
 import { create } from './records';
-import { applyPrepayment, catchUpLoan, comparePrepayVsInvest, emiFor, monthlyRate, newLoanFields, schedule, totals } from './loans';
+import { accrueBalance, remainingSchedule, applyPrepayment, catchUpLoan, comparePrepayVsInvest, emiFor, monthlyRate, newLoanFields, schedule, totals } from './loans';
 import type { Loan } from './types';
 
 function homeLoan(overrides: Partial<Loan> = {}): Loan {
@@ -93,5 +93,32 @@ describe('prepayment', () => {
     // Reinvesting freed EMIs at the same return as the loan rate is roughly a wash.
     expect(low.breakEvenReturnPct!).toBeGreaterThan(7);
     expect(low.breakEvenReturnPct!).toBeLessThan(10);
+  });
+});
+
+describe('moratorium (repayment not started)', () => {
+  const base = (over = {}) => create<Loan>({
+    ...newLoanFields({ principal: 400000, annualRate: 10.25, tenureMonths: 84, startDate: '2022-08-01', interestType: 'COMPOUND', compounding: 'MONTHLY', firstEmiDate: '2027-05-05' }),
+    name: 'Education', ownerId: 'self', ...over,
+  });
+
+  it('applies no EMIs and leaves the balance alone before the first EMI', () => {
+    const loan = base({ balance: '330000.00', balanceAsOf: '2026-11-02' });
+    const res = catchUpLoan(loan, '2027-04-30');
+    expect(res.events).toHaveLength(0);
+    expect(res.loan.balance).toBe('330000.00');
+  });
+
+  it('adds the interest that built up, then starts EMIs on the first EMI date', () => {
+    const loan = base({ balance: '330000.00', balanceAsOf: '2026-11-02' });
+    const res = catchUpLoan(loan, '2027-05-06');
+    expect(res.events.map(e => e.date)).toEqual(['2027-05-05']);
+    expect(Number(res.events[0].interest)).toBeGreaterThan(2800); // interest on a grown balance
+  });
+
+  it('projects the balance and starts the schedule at the first EMI', () => {
+    const loan = base({ balance: '330000.00', balanceAsOf: '2026-11-02' });
+    expect(Number(accrueBalance(loan, '2027-05-05'))).toBeGreaterThan(346000);
+    expect(remainingSchedule(loan)[0].date).toBe('2027-05-05');
   });
 });

@@ -1,5 +1,5 @@
 import { D, Decimal, ZERO, dec, type DecInput } from './money';
-import { addMonths, monthlyOccurrences, today, type ISODate } from './dates';
+import { addDays, addMonths, monthlyOccurrences, monthsBetween, today, type ISODate } from './dates';
 import { create } from './records';
 import type { Compounding, InterestType, Loan, LoanEvent } from './types';
 
@@ -70,13 +70,40 @@ export function totals(rows: ScheduleRow[]): { interest: Decimal; paid: Decimal;
   };
 }
 
-/** Next EMI date strictly after `after`. */
+/** True while the bank has not started collecting EMIs yet. */
+export function inMoratorium(loan: Loan, on: ISODate = today()): boolean {
+  return !!loan.firstEmiDate && on < loan.firstEmiDate;
+}
+
+/** Balance after interest builds up from `balanceAsOf` to `to` (no EMIs paid in between). */
+export function accrueBalance(loan: Loan, to: ISODate): Decimal {
+  const bal = D(loan.balance);
+  const months = monthsBetween(loan.balanceAsOf, to);
+  if (months <= 0) return bal;
+  const rate = loanRate(loan);
+  if (loan.interestType === 'SIMPLE') return bal.plus(bal.times(D(loan.annualRate).div(1200)).times(months)).toDecimalPlaces(2);
+  return bal.times(rate.plus(1).pow(months)).toDecimalPlaces(2);
+}
+
+/** Next EMI date strictly after `after`, never before the first EMI of a loan in moratorium. */
 export function nextEmiDate(loan: Loan, after: ISODate = today()): ISODate {
-  return monthlyOccurrences(loan.emiDay, after, addMonths(after, 2))[0];
+  const from = loan.firstEmiDate && loan.firstEmiDate > after ? addDays(loan.firstEmiDate, -1) : after;
+  return monthlyOccurrences(loan.emiDay, from, addMonths(from, 2), loan.firstEmiDate)[0];
+}
+
+/**
+ * The loan as it will stand when repayment begins: interest accrued up to the first EMI.
+ * Loans that are already repaying come back unchanged.
+ */
+export function atRepaymentStart(loan: Loan): Loan {
+  if (!loan.firstEmiDate || loan.balanceAsOf >= loan.firstEmiDate) return loan;
+  const asOf = addDays(loan.firstEmiDate, -1);
+  return { ...loan, balance: dec(accrueBalance(loan, asOf)), balanceAsOf: asOf };
 }
 
 export function remainingSchedule(loan: Loan, from: ISODate = loan.balanceAsOf): ScheduleRow[] {
-  return schedule(loan.balance, loanRate(loan), loan.emi, nextEmiDate(loan, from));
+  const l = atRepaymentStart(loan);
+  return schedule(l.balance, loanRate(l), l.emi, nextEmiDate(l, from > l.balanceAsOf ? from : l.balanceAsOf));
 }
 
 /**
@@ -85,7 +112,11 @@ export function remainingSchedule(loan: Loan, from: ISODate = loan.balanceAsOf):
  */
 export function catchUpLoan(loan: Loan, asOf: ISODate = today()): { loan: Loan; events: LoanEvent[] } {
   if (loan.closedAt || D(loan.balance).lte(0)) return { loan, events: [] };
-  const dates = monthlyOccurrences(loan.emiDay, loan.balanceAsOf, asOf);
+  // Repayment has not started: nothing falls due and the stored balance is left alone.
+  if (inMoratorium(loan, asOf)) return { loan, events: [] };
+  // Repayment starts now: interest that built up during the moratorium joins the balance first.
+  if (loan.firstEmiDate && loan.balanceAsOf < loan.firstEmiDate) loan = atRepaymentStart(loan);
+  const dates = monthlyOccurrences(loan.emiDay, loan.balanceAsOf, asOf, loan.firstEmiDate);
   if (dates.length === 0) return { loan, events: [] };
 
   const rate = loanRate(loan);
@@ -121,7 +152,9 @@ export type PrepayMode = 'REDUCE_TENURE' | 'REDUCE_EMI';
 
 /** Apply a part-prepayment to the loan, recalculating EMI when asked. */
 export function applyPrepayment(loan: Loan, amount: DecInput, date: ISODate, mode: PrepayMode): { loan: Loan; event: LoanEvent } {
-  const caughtUp = catchUpLoan(loan, date).loan;
+  let caughtUp = catchUpLoan(loan, date).loan;
+  // During a moratorium interest keeps building, so the payment comes off the grown balance.
+  if (inMoratorium(caughtUp, date)) caughtUp = { ...caughtUp, balance: dec(accrueBalance(caughtUp, date)), balanceAsOf: date };
   const pay = Decimal.min(D(amount), D(caughtUp.balance));
   const bal = D(caughtUp.balance).minus(pay);
   let emi = D(caughtUp.emi);
@@ -160,7 +193,7 @@ export function comparePrepayVsInvest(
   opts: { mode: PrepayMode; expectedReturnPct: DecInput; taxOnGainsPct?: DecInput; asOf?: ISODate },
 ): PrepayComparison {
   const asOf = opts.asOf ?? today();
-  const current = catchUpLoan(loan, asOf).loan;
+  const current = atRepaymentStart(catchUpLoan(loan, asOf).loan);
   const rate = loanRate(current);
   const first = nextEmiDate(current, asOf);
   const lump = Decimal.min(D(amount), D(current.balance));
@@ -228,8 +261,8 @@ export function comparePrepayVsInvest(
 /** Build a new loan record from what the user knows: principal, rate, tenure, optionally a known EMI. */
 export function newLoanFields(input: {
   principal: DecInput; annualRate: DecInput; tenureMonths: number; startDate: ISODate;
-  interestType: InterestType; compounding: Compounding; emi?: DecInput; emiDay?: number;
-}): Pick<Loan, 'principal' | 'annualRate' | 'tenureMonths' | 'startDate' | 'interestType' | 'compounding' | 'emi' | 'emiDay' | 'balance' | 'balanceAsOf'> {
+  interestType: InterestType; compounding: Compounding; emi?: DecInput; emiDay?: number; firstEmiDate?: ISODate;
+}): Pick<Loan, 'firstEmiDate' | 'principal' | 'annualRate' | 'tenureMonths' | 'startDate' | 'interestType' | 'compounding' | 'emi' | 'emiDay' | 'balance' | 'balanceAsOf'> {
   const rate = monthlyRate(input.annualRate, input.interestType, input.compounding);
   const emi = input.emi && D(input.emi).gt(0) ? D(input.emi) : emiFor(input.principal, rate, input.tenureMonths);
   return {
@@ -240,7 +273,8 @@ export function newLoanFields(input: {
     interestType: input.interestType,
     compounding: input.compounding,
     emi: dec(emi),
-    emiDay: input.emiDay ?? Number(input.startDate.slice(8, 10)),
+    emiDay: input.emiDay ?? Number((input.firstEmiDate ?? input.startDate).slice(8, 10)),
+    firstEmiDate: input.firstEmiDate,
     balance: dec(input.principal),
     balanceAsOf: input.startDate,
   };

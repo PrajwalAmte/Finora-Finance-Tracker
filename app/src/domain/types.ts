@@ -95,6 +95,8 @@ export interface Loan extends Base {
   tenureMonths: number;
   emi: Dec;
   emiDay: number;
+  /** Moratorium: no EMI falls due before this date (education loans). Interest keeps building until then. */
+  firstEmiDate?: ISODate;
   /** Outstanding balance as of `balanceAsOf`; the catch-up engine moves it forward. */
   balance: Dec;
   balanceAsOf: ISODate;
