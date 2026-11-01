@@ -205,3 +205,37 @@ describe('PDF text extraction', () => {
     await expect(parseInvestmentStatement(new Uint8Array([1, 2, 3]))).rejects.toBeInstanceOf(ImportError);
   });
 });
+
+describe('a CAMS statement as a real PDF', () => {
+  // Small type so every line fits the page: pdf.js drops text that runs past the page edge.
+  function camsPdf(password?: string): Uint8Array {
+    const doc = new jsPDF(password ? { encryption: { userPassword: password, ownerPassword: password, userPermissions: ['print'] } } : {});
+    doc.setFontSize(7);
+    CAMS.forEach((l, i) => doc.text(l, 10, 15 + i * 6));
+    return new Uint8Array(doc.output('arraybuffer'));
+  }
+
+  it('goes from PDF bytes to folios, units and transactions', async () => {
+    const res = await parseInvestmentStatement(camsPdf());
+    expect(res.source).toBe('CAS_MF');
+    expect(res.holdings.map(h => [h.isin, h.units, h.transactions.length])).toEqual([['INF179K01UT0', '5.846', 3], ['INF879O01027', '30', 1]]);
+  });
+
+  it('opens a password-protected statement with the right password only', async () => {
+    const bytes = camsPdf('me@example.com');
+    await expect(parseInvestmentStatement(bytes)).rejects.toMatchObject({ code: 'PASSWORD_NEEDED' });
+    await expect(parseInvestmentStatement(bytes, 'wrong')).rejects.toMatchObject({ code: 'PASSWORD_WRONG' });
+    expect((await parseInvestmentStatement(bytes, 'me@example.com')).holdings).toHaveLength(2);
+  });
+});
+
+describe('pdf.js build', () => {
+  it('imports the legacy build, which carries the polyfills older iPhones and Android WebViews need', async () => {
+    // The regular build fails there on every PDF ("toHex is not a function"). Node 22 also lacks
+    // those APIs, so the PDF tests above only pass because they run the legacy build too.
+    const source = (await import('./pdfText.ts?raw')).default;
+    const imports = [...source.matchAll(/await import\(\s*'(pdfjs-dist[^']*)'\s*\)/g)].map(m => m[1]);
+    expect(imports.length).toBeGreaterThan(0);
+    for (const spec of imports) expect(spec).toMatch(/^pdfjs-dist\/legacy\//);
+  });
+});

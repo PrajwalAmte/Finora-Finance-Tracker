@@ -78,7 +78,55 @@ export interface PickedFile {
   bytes: Uint8Array<ArrayBuffer>;
 }
 
+const EXTENSIONS: Record<string, string> = {
+  'application/pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-excel': '.xls',
+  'text/csv': '.csv',
+  'text/comma-separated-values': '.csv',
+};
+
+let openWebPicker: HTMLInputElement | null = null;
+
+/**
+ * Browsers: a plain <input type="file"> made synchronously inside the tap. The picker plugin's web
+ * version loads lazily before it opens the dialog, which Safari can treat as no longer being a tap,
+ * and it guesses "cancelled" from window focus when `cancel` is missing, so a PDF that is still
+ * downloading from iCloud was dropped silently. Here a pick only ends when the file is chosen or
+ * the browser reports a cancel.
+ */
+function pickFileWeb(types: string[]): Promise<PickedFile | null> {
+  openWebPicker?.remove();
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = false;
+    // MIME types and extensions together: some phones' pickers only honour one of them.
+    input.accept = types.includes('*/*') ? '' : [...new Set([...types, ...types.map(t => EXTENSIONS[t]).filter(Boolean)])].join(',');
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    openWebPicker = input;
+    const finish = () => {
+      input.remove();
+      if (openWebPicker === input) openWebPicker = null;
+    };
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      finish();
+      if (!file) return resolve(null);
+      try {
+        resolve({ name: file.name, mimeType: file.type, bytes: new Uint8Array(await file.arrayBuffer()) });
+      } catch (e) {
+        reject(e);
+      }
+    }, { once: true });
+    input.addEventListener('cancel', () => { finish(); resolve(null); }, { once: true });
+    input.click();
+  });
+}
+
 export async function pickFile(types: string[]): Promise<PickedFile | null> {
+  if (!isNative()) return pickFileWeb(types);
   try {
     const res = await FilePicker.pickFiles({ types, limit: 1, readData: true });
     const f = res.files[0];

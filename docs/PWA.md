@@ -10,20 +10,20 @@ A Progressive Web App built from the same `app/` code: installed from Safari/Chr
 
 | Feature | Native app | PWA | Notes |
 |---|---|---|---|
-| Vault, encryption, autosave | ✅ | ✅ | WebCrypto is identical; files go to IndexedDB (the Filesystem plugin's web fallback, already used by `npm run dev`) |
+| Vault, encryption, autosave | Yes | Yes | WebCrypto is identical; files go to IndexedDB (the Filesystem plugin's web fallback, already used by `npm run dev`) |
 | Unlock | Passphrase, Face ID / fingerprint, recovery code | Passphrase, recovery code | Passkey unlock possible later (see below) |
-| Statement import (PDF/Excel/CSV) | ✅ | ✅ | Same parsers; file input instead of the native picker |
-| Bank statement import | ✅ | ✅ | |
-| Quick add, categories, undo | ✅ | ✅ | |
-| Tax, XIRR, loans, simulator, goals, calendar, insights | ✅ | ✅ | Pure TypeScript |
+| Statement import (PDF/Excel/CSV) | Yes | Yes | Same parsers; file input instead of the native picker |
+| Bank statement import | Yes | Yes | |
+| Quick add, categories, undo | Yes | Yes | |
+| Tax, XIRR, loans, simulator, goals, calendar, insights | Yes | Yes | Pure TypeScript |
 | Export / import backup | Share sheet | Web Share (iOS/Android) or download (desktop) | |
-| Cloud vault (Google Drive / Dropbox) | — | ✅ optional | Encrypted copy in the user's own cloud; keeps devices in sync. See *Cloud vault* below |
-| Excel report, emergency PDF, 112A CSV | ✅ | ✅ | |
+| Cloud vault (Google Drive / Dropbox) | No | Yes, optional | Encrypted copy in the user's own cloud; keeps devices in sync. See *Cloud vault* below |
+| Excel report, emergency PDF, 112A CSV | Yes | Yes | |
 | NAV and stock price refresh | Direct | Via the app's own `/api` functions | AMFI and Yahoo send no CORS headers, so a browser cannot fetch them (checked) |
 | Payment screenshot → expense | Vision / ML Kit | Optional | Tesseract.js on-device: works, but ~10 MB download and less accurate |
-| Bank SMS | Android: reads SMS; iPhone: Shortcuts | ❌ | iOS opens links from Shortcuts in Safari, not in the installed web app, and the two have separate storage |
-| EMI/SIP reminders | Local notifications | ❌ | The web has no scheduled local notifications; push would need a server |
-| Screenshot blocking, app-switcher blur | ✅ | ❌ | Not available to web pages |
+| Bank SMS | Android: reads SMS; iPhone: Shortcuts | No | iOS opens links from Shortcuts in Safari, not in the installed web app, and the two have separate storage |
+| EMI/SIP reminders | Local notifications | No | The web has no scheduled local notifications; push would need a server |
+| Screenshot blocking, app-switcher blur | Yes | No | Not available to web pages |
 
 ## Price refresh in the PWA (decided: Vercel Functions)
 

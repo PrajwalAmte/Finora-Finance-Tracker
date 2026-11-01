@@ -10,17 +10,23 @@ type PdfJs = typeof import('pdfjs-dist');
 
 let pdfjsPromise: Promise<PdfJs> | null = null;
 
-/** Load pdf.js lazily: it is large and only needed when the user imports a PDF. */
+/**
+ * Load pdf.js lazily: it is large and only needed when the user imports a PDF.
+ *
+ * This is the "legacy" build on purpose. It bundles polyfills for newer JavaScript features
+ * (Uint8Array.toHex, Math.sumPrecise, Map.getOrInsert…). The regular build assumes a very recent
+ * browser and fails on every PDF elsewhere with errors like "toHex is not a function", which is
+ * what an older iPhone or Android WebView hits.
+ */
 async function loadPdfJs(): Promise<PdfJs> {
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
-      if (import.meta.env.MODE === 'test') {
-        // Tests run in Node, which needs the legacy build and no worker.
-        return (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfJs;
+      const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfJs;
+      // Tests run in Node, where pdf.js uses its built-in fake worker.
+      if (import.meta.env.MODE !== 'test') {
+        const worker = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
+        pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
       }
-      const pdfjs = await import('pdfjs-dist');
-      const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-      pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
       return pdfjs;
     })();
   }

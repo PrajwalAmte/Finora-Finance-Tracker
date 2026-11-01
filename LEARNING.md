@@ -1,6 +1,6 @@
 # LEARNING.md — Everything Learned Building Finora
 
-A complete reference of concepts, decisions, and hard-won lessons from building a full-stack personal finance tracker with Spring Boot, React, PostgreSQL (Supabase), and Railway deployment.
+A complete reference of concepts, decisions, and hard-won lessons from building Finora: first as a full-stack web app (Spring Boot, React, PostgreSQL on Supabase, Railway), then as a local-first Android/iOS app and PWA with no server or database (Capacitor, on-device encryption, optional Google Drive/Dropbox sync).
 
 ---
 
@@ -45,10 +45,33 @@ A complete reference of concepts, decisions, and hard-won lessons from building 
 37. [Testing Strategy](#37-testing-strategy)
 38. [Makefile — Local CI Automation](#38-makefile--local-ci-automation)
 39. [Common Pitfalls & Lessons Learned](#39-common-pitfalls--lessons-learned)
+40. [The Pivot: From Web App to Local-First](#40-the-pivot-from-web-app-to-local-first)
+41. [Capacitor — One Codebase, Native Apps](#41-capacitor--one-codebase-native-apps)
+42. [A Local-First Data Model](#42-a-local-first-data-model)
+43. [Money Without Floats in JavaScript](#43-money-without-floats-in-javascript)
+44. [Envelope Encryption and the Key Hierarchy](#44-envelope-encryption-and-the-key-hierarchy)
+45. [Crash-Safe Storage](#45-crash-safe-storage)
+46. [Replacing Cron Jobs: Catch-Up on Open](#46-replacing-cron-jobs-catch-up-on-open)
+47. [Sync Without a Server](#47-sync-without-a-server)
+48. [Portfolio Maths: FIFO Lots and XIRR](#48-portfolio-maths-fifo-lots-and-xirr)
+49. [Indian Capital-Gains Rules as Data](#49-indian-capital-gains-rules-as-data)
+50. [Loan Maths (and a Bug in the Old Server)](#50-loan-maths-and-a-bug-in-the-old-server)
+51. [Parsing Real-World Statements on the Device](#51-parsing-real-world-statements-on-the-device)
+52. [On-Device OCR and Text Capture](#52-on-device-ocr-and-text-capture)
+53. [PWA Fundamentals](#53-pwa-fundamentals)
+54. [CORS, and Why the Browser Needed a Relay](#54-cors-and-why-the-browser-needed-a-relay)
+55. [Vercel Deployment](#55-vercel-deployment)
+56. [OAuth 2.0 for an App Without a Backend](#56-oauth-20-for-an-app-without-a-backend)
+57. [Design: Minimal UI and UX Lessons](#57-design-minimal-ui-and-ux-lessons)
+58. [Testing the Mobile App and PWA](#58-testing-the-mobile-app-and-pwa)
+59. [Release and Cost Planning](#59-release-and-cost-planning)
+60. [More Pitfalls & Lessons Learned](#60-more-pitfalls--lessons-learned)
 
 ---
 
 ## 1. Project Overview
+
+> **Note:** this describes the original web app, retired in October 2026. The current local-first architecture starts at section 40.
 
 Finora is a personal finance tracker that operates in two modes:
 
@@ -1183,4 +1206,353 @@ Far-future cache headers (`Cache-Control: immutable`) only work correctly with c
 
 ---
 
-*This document covers the full stack — from SQL data types to WebCrypto key derivation — and all the infrastructure decisions that connect them. It was written while the code was still fresh to capture not just what was built, but why each decision was made.*
+## 40. The Pivot: From Web App to Local-First
+
+In October 2026 the web app described in sections 1–39 was retired. Finora was rebuilt as an Android/iOS app plus an installable web app (PWA), with **no account, no server and no database**: every user's data lives encrypted on their own device.
+
+### What "local-first" means here
+The device is the source of truth. The app works fully offline; the network is optional and used only for public data (fund NAVs, stock prices) and, if the user chooses, their own cloud storage. There is no Finora backend that stores anything about anyone.
+
+### Decisions that shaped the rebuild
+| Decision | Why |
+|---|---|
+| Capacitor instead of React Native or Flutter | The existing React + Tailwind UI could be reused; a RN/Flutter rewrite would have doubled the effort |
+| Drop the Spring Boot API and PostgreSQL | Nothing to host, secure, back up or pay for; the old local vault mode had already proved the idea |
+| Drop the hash-chained audit ledger | Tamper evidence matters when someone else holds your data. When only you hold it, it is cost without benefit |
+| Sync by encrypted export/import first, cloud copy later | Keeps "no server" true; the cloud copy is the user's own Drive/Dropbox, not ours |
+| Keep the old vault file format readable | Users of the web app can move their data across with one import |
+
+### Estimating a rewrite
+Most of the old code was plumbing (controllers, DTOs, repositories, JWT, Docker). Only ~2,300 lines of real logic (parsers, loan/SIP maths, price fetching) needed porting. **Measure what is logic and what is plumbing before calling something a rewrite.**
+
+---
+
+## 41. Capacitor — One Codebase, Native Apps
+
+### How it works
+Capacitor wraps the Vite build (`webDir: 'dist'`) in a native WebView and exposes native features through plugins. `npx cap sync` copies the web build into `android/` and `ios/` and wires up plugins. The native projects are committed; the copied web assets are git-ignored.
+
+### Plugins used
+Filesystem, Share, App (lifecycle, back button, deep links), Local Notifications, Haptics, Status Bar, Keyboard, biometric auth, secure storage (Keychain/Keystore), file picker, privacy screen, and ML Kit text recognition on Android.
+
+### Per-platform plugin sets
+`capacitor.config.ts` can list plugins per platform:
+```ts
+android: { includePlugins: [...shared, '@capacitor-community/image-to-text'] },
+ios: { includePlugins: shared },   // Vision plugin in Swift instead
+```
+Useful when a plugin only works on one platform or does not support the iOS package manager.
+
+### Swift Package Manager vs CocoaPods
+New Capacitor iOS projects use SPM. A plugin without a `Package.swift` is silently skipped ("not compatible with SPM"). Either switch the project to CocoaPods or replace the plugin. Finora replaced it with its own Swift plugin.
+
+### Writing app-local native plugins
+- **Android (Java):** a class annotated `@CapacitorPlugin`, registered in `MainActivity.onCreate` with `registerPlugin(SmsReaderPlugin.class)` *before* `super.onCreate`.
+- **iOS (Swift):** a `CAPPlugin` that implements `CAPBridgedPlugin` (`identifier`, `jsName`, `pluginMethods`), registered from a `CAPBridgeViewController` subclass in `capacitorDidLoad()`. The root view controller is created in `SceneDelegate`, so that is where the subclass is plugged in. New Swift files must also be added to the Xcode project file (or Xcode will not compile them).
+- **JS side:** `registerPlugin<MyPlugin>('JsName')` gives a typed proxy.
+
+### Verifying native code without the SDKs
+Without Xcode, the Swift Vision code was still compiled and *run* on macOS (Vision exists there too), and the plugin was type-checked against small stand-ins for Capacitor's types. CI then builds the real Android APK and iOS simulator app.
+
+---
+
+## 42. A Local-First Data Model
+
+### Every record carries sync metadata
+```ts
+interface Base { id: string; createdAt: string; updatedAt: string; deletedAt?: string }
+```
+- **UUIDs**, not auto-increment numbers: two devices can create records offline without collisions (`Date.now()` IDs collide).
+- **`updatedAt`** decides which edit wins when two copies are merged.
+- **`deletedAt` (tombstones):** deleting marks a record instead of removing it, so the deletion can travel to other devices.
+
+### Deterministic IDs for generated records
+Records the app creates by itself use IDs derived from their content: `emi-<loanId>-<date>`, `sip-<sipId>-<date>`, `snap-<date>`, `imp-<hash>`. If two devices both generate "the March EMI", they produce the *same* record, and merging deduplicates it for free. Re-importing a statement is a no-op for the same reason.
+
+### Transactions are the source of truth
+The old model stored "quantity + average price" on each investment. XIRR, FIFO capital gains and tax harvesting all need dated transactions, so holdings are now *derived* from buy/sell/dividend transactions. Changing this later would have meant a painful data migration; it had to be right in v1.
+
+### Schema versioning and migration
+The vault file carries `schemaVersion`. On import, an old (v1) file is upgraded: numeric IDs become stable string IDs (`v1-exp-7`), numbers become decimal strings, each old investment becomes a holding plus one opening BUY transaction, and the ledger is dropped.
+
+---
+
+## 43. Money Without Floats in JavaScript
+
+JavaScript numbers are IEEE-754 doubles, so the same `0.1 + 0.2` problem from section 39 applies. Finora:
+- stores amounts as **decimal strings** (`"125000.50"`);
+- does arithmetic with **decimal.js** (`D(a).plus(b)`), never `+` on money;
+- rounds explicitly when storing (`dec(x, 2)`, units to 6 dp, prices to 4 dp).
+
+**Exception:** forward projections (the prepay-vs-invest simulator, goal projections) are estimates evaluated hundreds of times per keystroke. Those run in plain floats; the loan schedules they read from stay in Decimal. Switching that loop to floats took it from ~3 seconds to instant.
+
+---
+
+## 44. Envelope Encryption and the Key Hierarchy
+
+### The problem with "derive the key from the passphrase on every save"
+PBKDF2 at 310,000 iterations takes ~1–2 s on a phone. That is fine on unlock, unusable for autosave.
+
+### The solution: a random data key, wrapped several ways
+```
+passphrase  ──PBKDF2──▶ passphrase key ─┐
+recovery code ──HKDF──▶ recovery key ───┼─wraps─▶ DATA KEY (random AES-256) ──encrypts──▶ vault.bin
+Keychain/Keystore (biometric) ──────────┘ holds a copy
+```
+- Autosave uses only the data key: instant.
+- Changing the passphrase re-wraps the data key; the vault is not re-encrypted.
+- The **recovery code** (256 random bits shown as 52 Crockford base32 characters) is a second way to unwrap the same key. HKDF is enough for it because it is already high-entropy; PBKDF2's slowness only matters for human-chosen passwords.
+- **Biometric unlock** stores a copy of the data key in the Keychain/Keystore, released after Face ID/fingerprint.
+
+### File formats with magic bytes
+`vault.bin` starts with `FNV2`, exports start with `FNRX` + version + iteration count + salt + IV. A header makes formats self-describing and lets the importer tell new files from old headerless `.enc` files.
+
+### WebCrypto details worth remembering
+- AES-GCM needs a unique 12-byte IV per encryption; generate a fresh one every time.
+- Decryption failure (wrong key) throws — that is the "wrong passphrase" signal.
+- TypeScript 5.7+ types `Uint8Array<ArrayBuffer>`; WebCrypto wants buffers backed by `ArrayBuffer`, so the code uses that alias.
+
+---
+
+## 45. Crash-Safe Storage
+
+Writing the vault in place risks a half-written file if the app is killed mid-write. Finora writes to `vault.bin.tmp`, moves the current file to `vault.bin.bak`, then renames the temp file into place. On read, a damaged `vault.bin` falls back to `vault.bin.bak`. Saves are debounced (600 ms) and flushed immediately when the app goes to the background, locks, or exports.
+
+---
+
+## 46. Replacing Cron Jobs: Catch-Up on Open
+
+The server used to run SIP processing on the 1st of the month and loan updates nightly. A phone app is not running at those times, so Finora runs a **catch-up** whenever the vault opens (and when the app returns to the foreground on a new day):
+- applies every EMI due since the loan's `balanceAsOf`;
+- records SIP installments due since `lastInstallment` (at the latest NAV, marked *estimated* so a later statement import replaces them);
+- records today's net-worth snapshot.
+
+It must be **idempotent**: running it twice changes nothing. Deterministic IDs (section 42) make that easy.
+
+---
+
+## 47. Sync Without a Server
+
+### Merge rules
+Records are matched by `id`; the newer `updatedAt` wins; tombstones win if newer. Settings merge as one unit; device-specific settings (biometrics, SMS, last export) stay local. The same merge powers file import and cloud sync.
+
+### Conditional writes
+Two devices saving at once must not overwrite each other. Each write says "only if the file is still at revision X":
+- **Dropbox:** `mode: { ".tag": "update", "update": rev }` gives a real conditional write.
+- **Google Drive v3:** no conditional write, so the version is re-checked immediately before writing (small race window, accepted).
+
+On conflict: re-download, re-merge, retry.
+
+### "Someone else's vault"
+If the cloud file cannot be decrypted with this device's data key, it belongs to a different vault (created elsewhere with another passphrase). Never merge or overwrite silently — ask the user.
+
+### Testing sync
+An in-memory provider with revisions and an injectable "another device wrote in between" hook made conflict handling testable and deterministic. A first attempt that triggered the competing write *asynchronously* raced with itself; making it synchronous fixed the flaky test.
+
+---
+
+## 48. Portfolio Maths: FIFO Lots and XIRR
+
+### FIFO
+Indian tax rules match sales against the oldest units first. Each BUY becomes a lot; each SELL consumes lots from the front, producing realised gain records with the buy date (needed for long/short-term classification).
+
+### XIRR
+Solve for the rate where the net present value of dated cash flows is zero. Newton–Raphson converges fast but can diverge; bisection is the fallback. Two practical details:
+- clamp solver noise (`|r| < 1e-6 → 0`) or the UI shows "−0.0%";
+- format percentages by rounding first, then choosing the sign.
+
+### Which price is "current"?
+A refreshed quote is dated by the last market close. A buy entered tonight should not override yesterday's close, but a sale from a year after an old quote should. The rule: the quote wins unless a trade is more than a few days newer.
+
+---
+
+## 49. Indian Capital-Gains Rules as Data
+
+Tax rules change by Budget, so they live in a **versioned table by sale date** (`domain/tax/rules.ts`), not in code paths:
+- sales from 23 Jul 2024: equity STCG 20%, LTCG 12.5% above the yearly exemption (₹1.25 L from FY 2024-25); before that 15% / 10% above ₹1 L;
+- debt funds bought from 1 Apr 2023 are taxed at slab regardless of holding period;
+- grandfathering for equity bought before 1 Feb 2018: cost = max(actual cost, min(FMV on 31 Jan 2018, sale value));
+- set-off order: short-term losses against short- then long-term gains, long-term losses only against long-term gains; apply losses and the exemption to the highest-rate gains first;
+- harvesting walks lots in FIFO order and stops at the first short-term lot, because that is how the real sale will be matched.
+
+Always label the output as an estimate, not advice.
+
+---
+
+## 50. Loan Maths (and a Bug in the Old Server)
+
+### Equivalent monthly rate
+For compounding other than monthly, the monthly rate is `(1 + r/n)^(n/12) − 1`, so twelve monthly charges equal the bank's stated compounding. The old Java code charged the *full quarterly rate every month* (≈3× the interest) and treated yearly compounding as simple. A unit test now pins the correct behaviour.
+
+### The last EMI absorbs rounding
+Rounding EMI and monthly interest to paise leaves a few rupees after 240 months. Banks adjust the final installment; so does Finora.
+
+### Prepay or invest?
+Compare wealth at the original loan end date: prepay and then invest the freed EMIs, versus invest the lump sum. Bisection finds the break-even return, which is the most useful number to show.
+
+---
+
+## 51. Parsing Real-World Statements on the Device
+
+### From PDFBox to pdf.js
+pdf.js returns positioned text items, not lines. Group items whose baselines are within ~2pt, sort by x, and insert spaces based on gaps to reconstruct lines like PDFBox's "sort by position". Password-protected PDFs raise `PasswordException` with code 1 (needed) or 2 (wrong).
+
+### Robust spreadsheet parsing
+SheetJS reads `.xlsx`, `.xls` and `.csv` into rows with one API. Find the header row by matching column-name aliases in the first ~30 rows. Normalise headers (case, dots, spaces). **Short aliases must match exactly:** `"description".includes("cr")` is true, which once mapped the narration column as "credit".
+
+### Real data drifts
+- AMFI's NAV file changed from 6 to 8 columns (it added *Plan* and *Option*). Reading NAV and date from the *end* of the row handles both.
+- The ISIN pattern copied from the old server (`IN[A-Z]{2}…`) rejected every mutual-fund ISIN (`INF879…` has a digit in position 4). It had been broken in the Java code too.
+- Both were only caught by running against the **live** file. Synthetic tests prove logic; real files prove assumptions.
+
+### Use the "legacy" build of pdf.js
+pdf.js's regular build assumes a very recent browser (it calls `Uint8Array.prototype.toHex`, `Math.sumPrecise`, `Map.prototype.getOrInsert` without fallbacks). On a browser without them every PDF failed with `a.toHex is not a function`. The `legacy/` build bundles polyfills and passed the same test. Import `pdfjs-dist/legacy/build/pdf.mjs` and `pdf.worker.min.mjs?url`. To reproduce an older browser without a device, strip those APIs from the page *and* from the worker (wrap `Worker` in a blob that deletes them, then imports the real worker).
+
+### Test PDFs must fit the page
+pdf.js leaves out text that runs past the page edge. A generated test PDF with long lines at the default 16pt silently lost the end of every line, so a correct parser "found nothing". Use a small font (7pt) for fixtures, and add at least one test that goes all the way from PDF bytes to parsed folios.
+
+### Idempotent import
+Imported transactions get IDs hashed from their content, and "estimated" SIP installments within a few days and ~2% of a real one are replaced by it.
+
+---
+
+## 52. On-Device OCR and Text Capture
+
+- **iOS:** Apple Vision (`VNRecognizeTextRequest`, accurate level, language correction off for amounts and IDs).
+- **Android:** ML Kit via a community plugin.
+- Vision returned `₹450` as `·450`: the parser accepts one stray symbol before a bare amount, and refuses numbers ≥ ₹10 crore so a 12-digit UPI reference is never taken as the amount.
+- **SMS:** Android can read the inbox with permission (Google Play requires a declaration). iOS cannot, so a Shortcuts automation forwards matching messages to `finora://capture?text=…`.
+- **Deep links are untrusted input:** anything can open a URL scheme, so a forwarded message only pre-fills a form; the user taps Save.
+- Every captured item gets a dedupe key (hash of the message or the UPI reference).
+
+---
+
+## 53. PWA Fundamentals
+
+- **Manifest + service worker** (via `vite-plugin-pwa`): installable, works offline, precaches the whole bundle including pdf.js and SheetJS.
+- **Prompt-to-update:** a new version waits until the user taps Update; pending saves are flushed first. Make that prompt persistent — a 6-second toast is easy to miss.
+- **`navigateFallbackDenylist`:** the service worker answers navigations with the app shell. Real pages (`/privacy.html`) and API routes must be excluded or the app appears where the policy should be.
+- **Secure context:** WebCrypto and service workers need HTTPS (localhost excepted), so a phone cannot test the PWA over `http://192.168.x.x`.
+- **iOS storage:** Safari may delete a site's storage after 7 days without a visit, but Home Screen web apps are exempt and have **separate storage from Safari**. Finora only creates a vault once installed, calls `navigator.storage.persist()`, and nudges for weekly backups.
+- **What a PWA cannot do:** biometrics (passkey PRF is not reliable yet), scheduled local notifications, SMS, screenshot blocking.
+
+---
+
+## 54. CORS, and Why the Browser Needed a Relay
+
+Neither AMFI nor Yahoo sends `Access-Control-Allow-Origin`, so browsers refuse to read their responses. Native apps are not browsers: `CapacitorHttp` makes the request through the OS and CORS never applies.
+
+For the PWA, two Vercel Functions on the app's own domain (`/api/amfi`, `/api/yahoo/:symbol`) relay exactly those two endpoints:
+- same origin → no CORS configuration at all;
+- `Sec-Fetch-Site` lets the function refuse requests made by pages on other websites;
+- strict input validation (a symbol regex) prevents it becoming an open proxy;
+- `Cache-Control: s-maxage=…` lets the CDN answer repeats, so upstream is hit rarely.
+
+The first version used a Cloudflare Worker on another domain, which needed an allowed-origins list. Moving to same-origin functions removed that whole category of configuration.
+
+---
+
+## 55. Vercel Deployment
+
+- **Root Directory** must point at the app (`app/`). Left at the repo root, Vercel published the repository's files as static files: a 404 at `/` while `/LEARNING.md` was served. Probing a few known file paths diagnosed it in seconds.
+- **Production branch** decides what the main URL serves; other branches get preview URLs.
+- `vercel.json` sets build command, output folder, region and headers. Functions in `api/` use `export function GET(request: Request)`. Files under `api/_lib/` are not exposed.
+- **`VITE_` variables are public** (baked into the bundle at build time and visible to anyone); secrets go in plain server-side variables. Changing env vars requires a redeploy.
+- The default `*.vercel.app` name cannot be renamed; extra `*.vercel.app` names or custom domains can be added.
+- Hobby plan is free but **non-commercial**: fine for a free PWA, not for a paid product.
+- The Vite dev and preview servers mount the same API router, so prices work locally without the Vercel CLI.
+
+---
+
+## 56. OAuth 2.0 for an App Without a Backend
+
+### Building blocks
+- **PKCE:** a random `code_verifier`, its SHA-256 `code_challenge`; proves the code is redeemed by the same client that asked for it. RFC 7636's test vector is a good unit test.
+- **`state`:** random, checked on return to prevent forged callbacks. The verifier and state survive the redirect in `sessionStorage` and are deleted on use.
+- **Redirect URIs must match exactly**, including the trailing slash and the exact host.
+
+### Provider differences
+- **Dropbox** supports public clients with PKCE *and* refresh tokens: no server at all.
+- **Google** only issues refresh tokens to clients with a secret, and a secret cannot live in a web page. So one stateless function (`/api/google/token`) exchanges codes and refresh tokens, holding the secret in a server env var. It never sees vault data.
+
+### Least privilege
+`drive.file` lets the app see only files it created. Dropbox "App folder" confines it to `Apps/Finora/`.
+
+### Google Cloud console gotchas
+- *Publish app* stays disabled until **Branding** is complete (home page, privacy policy URL, authorised domain).
+- **Authorised domains** take a bare domain: no `https://`, no slash.
+- Uploading a logo triggers a brand review; leave it empty if you do not need it.
+- In *Testing* status, refresh tokens expire after 7 days; publishing removes that. Non-sensitive scopes publish without review.
+- Client secrets may only be shown once; copy them at creation.
+
+### Where tokens live
+On the device, encrypted with the vault's data key in a device-only file. Never synced or exported, and only readable while the vault is unlocked.
+
+---
+
+## 57. Design: Minimal UI and UX Lessons
+
+- **Design tokens first** (palette, fonts, radii, motion in `tailwind.config.js`); changing the whole look then means changing tokens, not every screen.
+- **Iterate with the user's taste:** a gold "premium" theme was rejected, then gradients were rejected; the final look is flat — plain cards, one solid accent colour for actions, colour reserved for meaning (category icons, gains/losses).
+- **UX patterns that carried their weight:** undo snackbars instead of "Are you sure?"; large titles that collapse into a compact header; bottom-sheet forms with the keyboard resizing the view; quick add as one line of text; privacy mode that masks every amount; Indian number formats (₹1.2L, ₹3.4Cr).
+- **Accessibility:** `prefers-reduced-motion` disables animation; inputs use 16px text so iOS does not zoom.
+- **`twMerge`, not string concatenation,** when a component accepts class overrides: two conflicting `bg-*` classes are resolved by CSS order, not by which came last in the string.
+- **Bundle fonts** (`@fontsource`) for offline use and a strict Content-Security-Policy.
+
+---
+
+## 58. Testing the Mobile App and PWA
+
+- **Pure domain modules** (`domain/`, `vault/`, `importers/`, `capture/`, `cloud/sync`) have no React or Capacitor imports, so Vitest runs them in Node with no mocks.
+- **Known vectors:** standard EMI values, RFC 7636 PKCE, Excel's XIRR, old web-app vault files produced with the original algorithm.
+- **Real files beat assumptions:** generated PDFs (including password-protected ones via jsPDF), SheetJS-generated workbooks, and the *live* AMFI file found bugs synthetic text could not.
+- **Browser checks** in a phone-sized viewport caught UI bugs tests cannot (stale screenshots mid-animation are not bugs; read the DOM before concluding).
+- **Some things only a device can verify:** Face ID, Vision through the app, Shortcuts, OAuth redirects back into an installed PWA. Write them down as a checklist (docs/TESTING.md).
+
+---
+
+## 59. Release and Cost Planning
+
+- **Apple Developer Program:** ≈ ₹8,700/year; needed for TestFlight and the App Store. **Test on your own iPhone free** with Xcode's personal team (builds expire after 7 days).
+- **Google Play:** $25 once; new personal accounts need a **closed test with 12 testers for 14 consecutive days** before production.
+- **Pay last:** start Apple's yearly clock only when the iOS build is ready for others.
+- **ROI thinking:** a privacy-first app cannot sell data or show ads. The honest model is a free core plus a one-time Pro unlock via store in-app purchase, verified on the device. Break-even is roughly 40 Pro sales a year at ₹399. For the developer personally, tax-gain harvesting alone can save more than the Apple fee.
+- **The PWA is the free channel:** free hosting, free price relay, no store fees — with clear limitations.
+
+---
+
+## 60. More Pitfalls & Lessons Learned
+
+### Port the bugs consciously
+The quarterly-interest bug and the ISIN regex bug both came from the old code. Porting is the best moment to test old assumptions.
+
+### Make generated records deterministic
+If two devices can independently generate the same fact, give it the same ID.
+
+### Never trust a pasted share link as storage
+Drive and iCloud share links are read-only; iCloud Drive has no web write API. Writing needs OAuth.
+
+### Same-origin beats CORS configuration
+If you control a server anyway, put the relay on the same origin.
+
+### Service workers hijack navigations
+Anything that is not the app (policy pages, API routes) needs to be excluded from the navigation fallback.
+
+### Dev servers cache config
+After changing `tailwind.config.js`, restart the dev server; stale CSS made a theme change look half-applied.
+
+### Date strings from timestamps
+`new Date().toISOString().slice(0, 10)` is the **UTC** date — a day behind in India until 5:30 am. Use the local date (`format(date, 'yyyy-MM-dd')`).
+
+### Read the error, then probe
+A 404 from Vercel with `x-vercel-error: NOT_FOUND` and a few file probes revealed the wrong root directory and branch faster than any guess.
+
+### Do not wrap `<input type="file">` in a lazy plugin on the web
+The picker plugin's web version loads lazily before opening the dialog (Safari can stop treating that as a tap) and decides "cancelled" from window focus when the `cancel` event is missing, so a PDF still downloading from iCloud was dropped silently. A plain input created synchronously in the tap handler, resolved only on `change` or `cancel`, is more reliable.
+
+### Keep the user in control of irreversible steps
+Erase needs typing ERASE; replacing a different cloud vault needs confirmation; forwarded SMS needs a tap to save.
+
+---
+
+*This document covers everything from SQL data types and JWTs to on-device encryption, sync and OAuth — and the decisions that connect them. It is written while the code is still fresh to capture not just what was built, but why. Related plans live in docs/TESTING.md, docs/PWA.md and docs/RELEASE.md.*
