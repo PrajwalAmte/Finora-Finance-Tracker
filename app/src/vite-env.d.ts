@@ -12,3 +12,6 @@ interface ImportMetaEnv {
   /** Dropbox app key for "Save vault to Dropbox" (PWA). Empty hides the option. */
   readonly VITE_DROPBOX_APP_KEY?: string;
 }
+
+/** Build time, injected by Vite. */
+declare const __BUILD_ID__: string;

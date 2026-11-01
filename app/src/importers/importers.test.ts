@@ -298,6 +298,26 @@ describe('a CAMS statement as a real PDF', () => {
   });
 });
 
+describe('browsers without ReadableStream async iteration', () => {
+  it('still reads every page (pdf.js getTextContent would fail with "undefined is not a function")', async () => {
+    // Safari on many iPhones cannot `for await` over a ReadableStream.
+    const proto = ReadableStream.prototype as unknown as Record<symbol | string, unknown>;
+    const saved = { iter: proto[Symbol.asyncIterator], values: proto.values };
+    delete proto[Symbol.asyncIterator];
+    delete proto.values;
+    try {
+      const doc = new jsPDF();
+      doc.setFontSize(7);
+      CAMS.forEach((l, i) => doc.text(l, 10, 15 + i * 6));
+      const res = await parseInvestmentStatement(new Uint8Array(doc.output('arraybuffer')));
+      expect(res.holdings).toHaveLength(2);
+    } finally {
+      proto[Symbol.asyncIterator] = saved.iter;
+      proto.values = saved.values;
+    }
+  });
+});
+
 describe('pdf.js build', () => {
   it('imports the legacy build, which carries the polyfills older iPhones and Android WebViews need', async () => {
     // The regular build fails there on every PDF ("toHex is not a function"). Node 22 also lacks

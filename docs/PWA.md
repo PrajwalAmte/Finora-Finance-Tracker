@@ -132,3 +132,9 @@ The secret is needed because Google only gives long-lived refresh tokens to apps
 
 Leave a variable empty to hide that provider. For local testing put the same `VITE_*` values in `app/.env.local` (git-ignored) and `GOOGLE_CLIENT_SECRET` in your shell when running `npm run dev`.
 
+## Browser requirements
+
+- The app itself needs iOS 15.4+ / a current Chrome, Edge or Firefox.
+- **PDF import needs iOS 17.4+** (the PDF reader uses `Promise.withResolvers`). Older iPhones get a clear message; they can import on another device and move data with a backup file. Excel/CSV imports work on all supported versions.
+- Settings shows the build time at the bottom. A home-screen web app keeps its old build until you tap **Update** in the "new version" banner or fully close it from the app switcher.
+

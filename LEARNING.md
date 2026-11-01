@@ -1408,6 +1408,12 @@ SheetJS reads `.xlsx`, `.xls` and `.csv` into rows with one API. Find the header
 ### Use the "legacy" build of pdf.js
 pdf.js's regular build assumes a very recent browser (it calls `Uint8Array.prototype.toHex`, `Math.sumPrecise`, `Map.prototype.getOrInsert` without fallbacks). On a browser without them every PDF failed with `a.toHex is not a function`. The `legacy/` build bundles polyfills and passed the same test. Import `pdfjs-dist/legacy/build/pdf.mjs` and `pdf.worker.min.mjs?url`. To reproduce an older browser without a device, strip those APIs from the page *and* from the worker (wrap `Worker` in a blob that deletes them, then imports the real worker).
 
+### pdf.js `getTextContent()` needs async iteration over streams
+Even the legacy build's `page.getTextContent()` does `for await (const chunk of readableStream)`. Safari on many iPhones cannot iterate a `ReadableStream` that way, so every import failed there while it worked on desktop Chrome. Read `page.streamTextContent().getReader()` in a plain loop instead. The same trick of deleting one API at a time (in the page and in a blob-wrapped worker) in real WebKit via Playwright found which features the import path really depends on: `Promise.withResolvers` (iOS 17.4), `Object.hasOwn`, `crypto.randomUUID` (iOS 15.4) and the stream iteration above. When something cannot be polyfilled (the worker needs `withResolvers`), detect it up front and show a plain message instead of a cryptic engine error.
+
+### Show the build id somewhere
+A home-screen web app keeps running its cached build until the update toast is accepted or the app is fully closed. Show a build time in Settings so "I pushed it and it still fails" can be answered in one glance.
+
 ### Test PDFs must fit the page
 pdf.js leaves out text that runs past the page edge. A generated test PDF with long lines at the default 16pt silently lost the end of every line, so a correct parser "found nothing". Use a small font (7pt) for fixtures, and add at least one test that goes all the way from PDF bytes to parsed folios.
 

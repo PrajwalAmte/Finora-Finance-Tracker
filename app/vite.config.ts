@@ -74,6 +74,8 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    // Shown in Settings so it is obvious which build a phone is running (a PWA can keep an old one).
+    define: { __BUILD_ID__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC') },
     // Capacitor serves the bundle from the app's local origin, so native assets must be relative.
     base: pwa ? '/' : './',
     optimizeDeps: {

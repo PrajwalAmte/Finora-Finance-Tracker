@@ -34,11 +34,35 @@ async function loadPdfJs(): Promise<PdfJs> {
 }
 
 /**
+ * Read a page's text items with a plain stream reader. pdf.js's own `page.getTextContent()` loops
+ * with `for await … of` over the stream, and Safari on many iPhones cannot iterate a ReadableStream
+ * that way: it fails with "undefined is not a function".
+ */
+async function readTextItems(page: { streamTextContent(): ReadableStream<{ items: unknown[] }> }): Promise<TextItem[]> {
+  const reader = page.streamTextContent().getReader();
+  const items: TextItem[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    items.push(...(value.items as TextItem[]));
+  }
+  return items;
+}
+
+/** The worker and library need `Promise.withResolvers` (iOS 17.4 and newer, current Android Chrome). */
+function assertSupported(): void {
+  if (typeof (Promise as { withResolvers?: unknown }).withResolvers !== 'function') {
+    throw new ImportError('PDF import needs a newer phone software version (iOS 17.4 or later). Update iOS, or import the statement on another device and move your data with a backup file.', 'UNREADABLE');
+  }
+}
+
+/**
  * Extract text as visual lines, top to bottom and left to right, like PDFBox's sort-by-position.
  * Items whose baselines are within 2pt are treated as one line, and wide horizontal gaps become
  * double spaces so column boundaries survive.
  */
 export async function extractPdfLines(bytes: Uint8Array, password?: string): Promise<string[]> {
+  assertSupported();
   const pdfjs = await loadPdfJs();
   const task = pdfjs.getDocument({ data: new Uint8Array(bytes), password: password || undefined, useSystemFonts: false, verbosity: 0 });
   let doc;
@@ -58,8 +82,7 @@ export async function extractPdfLines(bytes: Uint8Array, password?: string): Pro
   try {
     for (let p = 1; p <= doc.numPages; p++) {
       const page = await doc.getPage(p);
-      const content = await page.getTextContent();
-      const items = (content.items as TextItem[]).filter(i => typeof i.str === 'string' && i.str.trim() !== '');
+      const items = (await readTextItems(page)).filter(i => typeof i.str === 'string' && i.str.trim() !== '');
       const rows: { y: number; items: TextItem[] }[] = [];
       for (const item of items) {
         const y = item.transform[5];

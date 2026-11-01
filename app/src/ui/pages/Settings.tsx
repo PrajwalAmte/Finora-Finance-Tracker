@@ -196,6 +196,7 @@ export default function SettingsPage() {
       </Panel>
 
       <Button variant="ghost" className="text-error-600" fullWidth iconLeft={<Trash2 size={18} />} onClick={() => setErase(true)}>Erase vault from this phone</Button>
+      <p className="text-center text-[11px] text-neutral-400 dark:text-neutral-500 num">Finora build {__BUILD_ID__}</p>
 
       <SmsShortcutGuide open={smsGuide} onClose={() => setSmsGuide(false)} />
       <OwnerSheet open={!!owner} onClose={() => setOwner(null)} owner={owner?.owner} />
