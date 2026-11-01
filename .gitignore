@@ -72,3 +72,6 @@ lerna-debug.log*
 src/main/resources/application-prod.properties
 src/main/resources/application-dev.properties
 !src/main/resources/application.properties 
+
+# Real statements used for accuracy testing (never commit)
+app/testdata/private/

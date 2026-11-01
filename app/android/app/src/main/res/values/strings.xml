@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Finora</string>
+    <string name="title_activity_main">Finora</string>
+    <string name="package_name">app.finora.mobile</string>
+    <string name="custom_url_scheme">app.finora.mobile</string>
+</resources>

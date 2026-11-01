@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+    <meta name="theme-color" content="#0b0b12" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Investments, SIPs, loans, spending and capital-gains tax, encrypted on your device. No account." />
+    <!-- Installed iPhone web app: full screen with the content under a translucent status bar. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Finora" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="icons/favicon-64.png" />
+    <!-- Network access is limited to the price sources: AMFI and Yahoo directly in the native apps,
+         the app's own /api functions ('self') in the PWA; Google Drive and Dropbox only when the user
+         links one to keep an encrypted copy of the vault. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://portal.amfiindia.com https://query1.finance.yahoo.com https://www.googleapis.com https://api.dropboxapi.com https://content.dropboxapi.com capacitor: http://localhost https://localhost; font-src 'self' data:" />
+    <title>Finora</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

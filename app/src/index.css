@@ -1,0 +1,104 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/manrope';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900 antialiased font-sans;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* Flat backgrounds: soft grey in light mode, deep ink in dark mode. */
+  .dark body {
+    @apply text-neutral-100;
+    background: #0b0b12;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+    letter-spacing: -0.01em;
+  }
+
+  /* Native feel: no text selection on controls, no callouts on long-press. */
+  button,
+  nav,
+  header {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  ::selection {
+    @apply bg-primary-300/40;
+  }
+
+  .dark input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+
+  /* In dark mode accent text moves up the scale so it reads on the ink background. */
+  .dark .text-primary-600,
+  .dark .text-primary-700 {
+    @apply text-primary-300;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum', 'lnum';
+  }
+
+  /* Cards: white with a hairline border in light mode, one step above the background in dark mode. */
+  .surface {
+    @apply bg-white border border-neutral-200/80;
+  }
+  .dark .surface {
+    background: #14141d;
+    border-color: rgba(255, 255, 255, 0.07);
+  }
+
+  .hairline {
+    @apply border-neutral-200/80;
+  }
+  .dark .hairline {
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .pressable {
+    transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s, opacity 0.2s;
+  }
+  .pressable:active {
+    transform: scale(0.975);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
