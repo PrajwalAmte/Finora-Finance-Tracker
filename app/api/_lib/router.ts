@@ -1,5 +1,5 @@
-import { routePriceRequest } from './priceProxy';
-import { exchangeGoogleToken, googleEnv } from './googleToken';
+import { routePriceRequest } from './priceProxy.js';
+import { exchangeGoogleToken, googleEnv } from './googleToken.js';
 
 /** Same routing Vercel does from the api/ folder, for the Vite dev and preview servers. */
 export function routeApi(request: Request): Promise<Response> {

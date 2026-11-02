@@ -1,4 +1,4 @@
-import { routePriceRequest } from '../_lib/priceProxy';
+import { routePriceRequest } from '../_lib/priceProxy.js';
 
 /** GET /api/yahoo/:symbol — one Yahoo Finance quote for the PWA. */
 export function GET(request: Request): Promise<Response> {
