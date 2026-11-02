@@ -28,12 +28,12 @@ interface Pending {
 const KEY = 'finora.oauth';
 
 /**
- * The verifier and state survive the round trip to the provider in sessionStorage (this tab only,
- * cleared on use). They are single-use and useless without the provider's one-time code.
+ * The verifier and state survive the round trip to the provider in localStorage (an installed iPhone
+ * web app can come back in a fresh session, which loses sessionStorage), cleared on use. They are single-use and useless without the provider's one-time code.
  */
 export function savePending(p: Pending): void {
   try {
-    sessionStorage.setItem(KEY, JSON.stringify(p));
+    localStorage.setItem(KEY, JSON.stringify(p));
   } catch {
     // Private mode without storage: the sign-in will simply fail and can be retried.
   }
@@ -41,8 +41,8 @@ export function savePending(p: Pending): void {
 
 export function takePending(state: string): Pending | null {
   try {
-    const raw = sessionStorage.getItem(KEY);
-    sessionStorage.removeItem(KEY);
+    const raw = localStorage.getItem(KEY);
+    localStorage.removeItem(KEY);
     if (!raw) return null;
     const p = JSON.parse(raw) as Pending;
     return p.state === state ? p : null;

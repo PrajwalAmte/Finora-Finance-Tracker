@@ -41,9 +41,18 @@ export function snapshotFor(data: VaultData, date: ISODate = today(), positions?
   });
 }
 
+/**
+ * Net worth over time. Snapshots taken before a loan was added do not contain it, so adding a
+ * years-old loan would look like a sudden drop. Loans are subtracted from the older points too,
+ * which keeps the trend about what actually changed.
+ */
 export function snapshotSeries(data: VaultData, days = 365): { date: ISODate; value: number }[] {
+  const loans = live(data.loans).filter(l => !l.closedAt);
   return live(data.snapshots)
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-days)
-    .map(s => ({ date: s.date, value: D(s.netWorth).toNumber() }));
+    .map(s => {
+      const missing = loans.filter(l => l.createdAt.slice(0, 10) > s.date).reduce((sum, l) => sum.plus(D(l.balance)), ZERO);
+      return { date: s.date, value: D(s.netWorth).minus(missing).toNumber() };
+    });
 }

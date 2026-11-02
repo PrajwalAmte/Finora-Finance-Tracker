@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from './Button';
-import { AmountField, DateField, SelectField, Sheet, TextField } from './kit';
+import { AmountField, DateField, SelectField, Segmented, Sheet, TextField } from './kit';
 import { D, dec } from '../../domain/money';
 import { today } from '../../domain/dates';
 import { create, live, touch } from '../../domain/records';
@@ -29,6 +29,7 @@ export const LoanSheet: React.FC<{ open: boolean; onClose: () => void; loan?: Lo
   const [emiDay, setEmiDay] = useState('5');
   const [balance, setBalance] = useState('');
   const [firstEmi, setFirstEmi] = useState('');
+  const [status, setStatus] = useState<'REPAYING' | 'WAITING'>('REPAYING');
   const [interestType, setInterestType] = useState<InterestType>('COMPOUND');
   const [compounding, setCompounding] = useState<Compounding>('MONTHLY');
   const [accountRef, setAccountRef] = useState('');
@@ -38,19 +39,19 @@ export const LoanSheet: React.FC<{ open: boolean; onClose: () => void; loan?: Lo
     if (!open) return;
     setName(loan?.name ?? ''); setLender(loan?.lender ?? ''); setPrincipal(loan?.principal ?? ''); setRate(loan?.annualRate ?? '');
     setTenure(loan ? String(loan.tenureMonths) : ''); setStart(loan?.startDate ?? today()); setEmi(loan?.emi ?? '');
-    setEmiDay(String(loan?.emiDay ?? 5)); setBalance(''); setFirstEmi(loan?.firstEmiDate ?? ''); setInterestType(loan?.interestType ?? 'COMPOUND');
+    setEmiDay(String(loan?.emiDay ?? 5)); setBalance(''); setFirstEmi(loan?.firstEmiDate ?? ''); setStatus(loan?.firstEmiDate && loan.firstEmiDate > today() ? 'WAITING' : 'REPAYING'); setInterestType(loan?.interestType ?? 'COMPOUND');
     setCompounding(loan?.compounding ?? 'MONTHLY'); setAccountRef(loan?.accountRef ?? ''); setOwnerId(loan?.ownerId ?? SELF_OWNER_ID);
   }, [open, loan]);
 
   const months = Number(tenure);
   const computedEmi = D(principal).gt(0) && D(rate).gte(0) && months > 0 ? emiFor(principal, monthlyRate(rate, interestType, compounding), months) : null;
-  const valid = name.trim() && D(principal).gt(0) && months > 0 && Number(emiDay) >= 1 && Number(emiDay) <= 31;
+  const valid = (status === 'REPAYING' || !!firstEmi) && name.trim() && D(principal).gt(0) && months > 0 && (status === 'WAITING' || (Number(emiDay) >= 1 && Number(emiDay) <= 31));
   const started = start < today();
-  const waiting = !!firstEmi && firstEmi > today();
+  const waiting = status === 'WAITING';
 
   const submit = () => {
     if (!valid) return;
-    const base = newLoanFields({ principal, annualRate: rate || '0', tenureMonths: months, startDate: start, interestType, compounding, emi: emi || undefined, emiDay: Number(emiDay), firstEmiDate: firstEmi || undefined });
+    const base = newLoanFields({ principal, annualRate: rate || '0', tenureMonths: months, startDate: start, interestType, compounding, emi: emi || undefined, emiDay: status === 'WAITING' ? undefined : Number(emiDay), firstEmiDate: status === 'WAITING' ? firstEmi : undefined });
     const fields = { ...base, name: name.trim(), lender: lender.trim() || undefined, accountRef: accountRef.trim() || undefined, ownerId };
     if (loan) {
       // Keep the tracked balance unless the user typed a fresh one.
@@ -81,14 +82,23 @@ export const LoanSheet: React.FC<{ open: boolean; onClose: () => void; loan?: Lo
         <TextField label="Tenure (months)" inputMode="numeric" value={tenure} onChange={v => setTenure(v.replace(/\D/g, ''))} />
         <DateField label="Disbursed on" value={start} onChange={setStart} max={today()} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <AmountField label="EMI" value={emi} onChange={setEmi} hint={computedEmi ? `Calculated ${inr(computedEmi)}` : undefined} />
-        <TextField label="EMI day" inputMode="numeric" value={emiDay} onChange={v => setEmiDay(v.replace(/\D/g, '').slice(0, 2))} />
+      <div className="space-y-2">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Repayment</div>
+        <Segmented value={status} onChange={setStatus} options={[{ value: 'REPAYING', label: 'EMIs running' }, { value: 'WAITING', label: 'Not started yet' }]} />
       </div>
-      <DateField label="First EMI date" hint="Only if repayment has not started yet" value={firstEmi} onChange={setFirstEmi} min={start} />
-      {waiting && <p className="text-xs text-neutral-500 -mt-2">Moratorium: no EMIs before this date. Interest keeps building at the loan rate and joins the balance when repayment starts. Enter the outstanding your bank shows, including any prepayments you made.</p>}
+      {waiting && (
+        <>
+          <DateField label="First EMI date" value={firstEmi} onChange={setFirstEmi} min={start} hint="From your bank app. No EMIs are counted before this day." />
+          <p className="text-xs text-neutral-500 -mt-2">Interest keeps building at the loan rate until then and is added to the balance when repayment starts.</p>
+        </>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <AmountField label={waiting ? 'EMI (once it starts)' : 'EMI'} value={emi} onChange={setEmi} hint={computedEmi ? `Calculated ${inr(computedEmi)}` : undefined} />
+        {!waiting && <TextField label="EMI day" inputMode="numeric" value={emiDay} onChange={v => setEmiDay(v.replace(/\D/g, '').slice(0, 2))} />}
+      </div>
       {(started || loan) && (
-        <AmountField label={loan ? 'Correct outstanding balance (optional)' : 'Outstanding today (from your bank app)'} value={balance} onChange={setBalance} hint={loan ? `Tracked: ${inr(loan.balance)} as of ${loan.balanceAsOf}` : 'Leave empty to calculate it from the EMIs since the start date.'} />
+        <AmountField label="Outstanding today (bank app)" value={balance} onChange={setBalance}
+          hint={loan ? `Finora shows ${inr(loan.balance)} (as of ${loan.balanceAsOf}). Type your bank's figure to correct it, including any prepayments already made.` : 'Include prepayments already made. Leave empty to calculate it from the EMIs.'} />
       )}
       <div className="grid grid-cols-2 gap-3">
         <SelectField label="Interest" value={interestType} onChange={v => setInterestType(v as InterestType)} options={[{ value: 'COMPOUND', label: 'Reducing balance' }, { value: 'SIMPLE', label: 'Simple' }]} />

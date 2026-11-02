@@ -121,6 +121,9 @@ function schedule(ms: number) {
 }
 
 /** Called when the vault opens. Loads this device's link (or the one just made) and syncs. */
+/** A failed sign-in is reported after the vault unlocks, so it must outlive the unlock. */
+let returnError: string | undefined;
+
 export async function attachCloud(s: VaultStore): Promise<void> {
   if (!cloudSupported()) return;
   store = s;
@@ -130,7 +133,8 @@ export async function attachCloud(s: VaultStore): Promise<void> {
     pending = null;
     await persist();
   }
-  set({ connection: publicConnection(connection), status: connection ? 'idle' : 'off', restore: undefined });
+  set({ connection: publicConnection(connection), status: connection ? 'idle' : returnError ? 'error' : 'off', error: connection ? undefined : returnError, restore: undefined });
+  returnError = undefined;
   unsubscribe?.();
   // Edits sync 15 s after they stop; leaving the app syncs at once.
   const offStore = s.subscribe(() => { if (connection) schedule(15_000); });
@@ -185,9 +189,14 @@ export async function handleOAuthReturn(): Promise<void> {
   const back = readRedirect();
   if (!back?.state) return;
   const p = takePending(back.state);
-  if (!p) return;
+  if (!p) {
+    returnError = 'Sign-in could not be finished because this app lost its place. Open Finora from the Home Screen and try again.';
+    set({ status: 'error', error: returnError });
+    return;
+  }
   if (back.error || !back.code) {
-    set({ status: 'error', error: back.error === 'access_denied' ? 'Sign-in was cancelled' : 'Sign-in failed' });
+    returnError = back.error === 'access_denied' ? 'Sign-in was cancelled' : `Sign-in failed (${back.error ?? 'no code'})`;
+    set({ status: 'error', error: returnError });
     return;
   }
   try {
@@ -210,7 +219,8 @@ export async function handleOAuthReturn(): Promise<void> {
       set({ status: 'idle', connection: publicConnection(conn) });
     }
   } catch (e) {
-    set({ status: 'error', error: (e as Error).message });
+    returnError = (e as Error).message;
+    set({ status: 'error', error: returnError });
   }
 }
 

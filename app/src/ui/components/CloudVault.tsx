@@ -72,6 +72,7 @@ export const CloudVaultSection: React.FC = () => {
         <p className="mt-4 text-[12.5px] text-neutral-500 dark:text-neutral-400">Not set up on this site yet (see docs/PWA.md → Cloud vault).</p>
       ) : (
         <div className="mt-4 grid gap-2">
+          {cloud.status === 'error' && cloud.error && <p className="text-[12.5px] text-error-500 leading-relaxed">{cloud.error}</p>}
           {available.map(p => (
             <button key={p.id} onClick={() => connectCloud(p.id)} className="pressable w-full flex items-center gap-3 rounded-2xl p-3 ring-1 ring-inset ring-neutral-200 dark:ring-white/10 hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
               <span className={cx('h-9 w-9 rounded-xl flex items-center justify-center', BRAND[p.id])}><Cloud size={17} /></span>

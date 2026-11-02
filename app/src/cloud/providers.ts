@@ -76,7 +76,7 @@ export async function completeSignIn(provider: ProviderId, code: string, verifie
       body: JSON.stringify({ code, codeVerifier: verifier, redirectUri: redirectUri() }),
     });
     const data = (await res.json()) as { access_token?: string; expires_in?: number; refresh_token?: string; id_token?: string; error?: string };
-    if (!res.ok || !data.access_token) throw new Error(data.error === 'not_configured' ? 'Google Drive is not set up on this server' : 'Google sign-in failed');
+    if (!res.ok || !data.access_token) throw new Error(data.error === 'not_configured' ? 'Google Drive is not set up on this server' : `Google sign-in failed${data.error ? ` (${data.error})` : ''}`);
     return {
       tokens: { accessToken: data.access_token, expiresAt: Date.now() + ((data.expires_in ?? 3600) - 60) * 1000, refreshToken: data.refresh_token },
       account: decodeJwtEmail(data.id_token) ?? 'Google account',
