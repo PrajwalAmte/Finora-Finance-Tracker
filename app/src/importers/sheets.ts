@@ -71,6 +71,11 @@ const H = {
   symbol: ['nse symbol', 'bse symbol', 'trading symbol', 'symbol', 'ticker', 'nse code'],
   ltp: ['last traded price', 'last price', 'market price', 'current price', 'close price', 'closing price', 'ltp', 'cmp', 'nav'],
   type: ['instrument type', 'asset type', 'asset class', 'type', 'series'],
+  // Totals instead of per-unit figures (Groww/Kuvera/Coin mutual-fund exports).
+  invested: ['invested value', 'invested amount', 'total invested', 'amount invested', 'total cost', 'cost value', 'buy value', 'investment value'],
+  value: ['current value', 'market value', 'present value', 'current amount', 'valuation'],
+  folio: ['folio no', 'folio number', 'folio'],
+  amc: ['amc', 'fund house'],
 };
 
 function holdingType(typeText: string, isin: string | undefined, name: string): AssetType {
@@ -111,9 +116,13 @@ export function parseHoldingsSheet(bytes: Uint8Array): StatementPreview {
       const symbol = pick('symbol');
       const name = pick('name');
       const type = pick('type');
+      const invested = pick('invested');
+      const value = pick('value');
+      const folio = pick('folio');
+      const amc = pick('amc');
       if (qty >= 0 && (isin >= 0 || name >= 0 || symbol >= 0)) {
         headerIdx = r;
-        cols = { isin, qty, avg, ltp, symbol, name, type };
+        cols = { isin, qty, avg, ltp, symbol, name, type, invested, value, folio, amc };
         break;
       }
     }
@@ -133,8 +142,15 @@ export function parseHoldingsSheet(bytes: Uint8Array): StatementPreview {
       if (!name || /^total/i.test(name)) continue;
       const qty = cellNumber(row[cols.qty]);
       if (!qty || qty.lte(0)) continue;
-      const avg = cols.avg >= 0 ? cellNumber(row[cols.avg]) : null;
-      const ltp = cols.ltp >= 0 ? cellNumber(row[cols.ltp]) : null;
+      let avg = cols.avg >= 0 ? cellNumber(row[cols.avg]) : null;
+      let ltp = cols.ltp >= 0 ? cellNumber(row[cols.ltp]) : null;
+      // Only totals given: derive per-unit cost and price from them.
+      const invested = cols.invested >= 0 ? cellNumber(row[cols.invested]) : null;
+      const value = cols.value >= 0 ? cellNumber(row[cols.value]) : null;
+      if (!avg && invested?.gt(0)) avg = invested.div(qty);
+      if (!ltp && value?.gt(0)) ltp = value.div(qty);
+      const folio = cols.folio >= 0 ? cellText(row[cols.folio]) || undefined : undefined;
+      const amc = cols.amc >= 0 ? cellText(row[cols.amc]) || undefined : undefined;
       const type = holdingType(cols.type >= 0 ? cellText(row[cols.type]) : '', isin, name);
       const key = isin ?? `${type}|${(symbol ?? name).toUpperCase()}`;
       const existing = merged.get(key);
@@ -149,7 +165,7 @@ export function parseHoldingsSheet(bytes: Uint8Array): StatementPreview {
       }
       merged.set(key, {
         type, name, isin, symbol: type === 'MUTUAL_FUND' ? undefined : symbol ?? (name.includes(' ') ? undefined : name),
-        units: units(qty), avgCost: avg ? price(avg) : undefined, price: ltp ? price(ltp) : undefined,
+        units: units(qty), avgCost: avg ? price(avg) : undefined, price: ltp ? price(ltp) : undefined, folio, amc,
         transactions: [], cost,
       });
     }

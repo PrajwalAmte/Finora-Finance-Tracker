@@ -109,6 +109,18 @@ describe('broker holdings sheets', () => {
     ]);
   });
 
+  it('derives cost and price from invested/current value totals (Groww mutual-fund export)', () => {
+    const csv = new TextEncoder().encode([
+      'Name,Mobile', 'Holding summary,', '',
+      'Scheme Name,AMC,Category,Folio No.,Units,Invested Value,Current Value,Returns',
+      'Quant Small Cap Fund Direct Plan Growth,Quant Mutual Fund,Equity,51085752323,131.135,39998.08,39042.04,-956.04',
+    ].join('\n'));
+    const [h] = parseHoldingsSheet(csv).holdings;
+    expect(h).toMatchObject({ type: 'MUTUAL_FUND', units: '131.135', folio: '51085752323', amc: 'Quant Mutual Fund' });
+    expect(Number(h.avgCost) * 131.135).toBeCloseTo(39998.08, 0);
+    expect(Number(h.price) * 131.135).toBeCloseTo(39042.04, 0);
+  });
+
   it('reads CSV and merges the same security across accounts', () => {
     const csv = new TextEncoder().encode('Instrument,Qty.,Avg. cost,LTP\nTCS,10,3000,4000\nTCS,10,3500,4000\n');
     const [h] = parseHoldingsSheet(csv).holdings;
