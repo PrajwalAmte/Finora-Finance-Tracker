@@ -85,7 +85,7 @@ export const LoanSheet: React.FC<{ open: boolean; onClose: () => void; loan?: Lo
         <AmountField label="EMI" value={emi} onChange={setEmi} hint={computedEmi ? `Calculated ${inr(computedEmi)}` : undefined} />
         <TextField label="EMI day" inputMode="numeric" value={emiDay} onChange={v => setEmiDay(v.replace(/\D/g, '').slice(0, 2))} />
       </div>
-      <DateField label="First EMI date (only if repayment has not started)" value={firstEmi} onChange={setFirstEmi} min={start} />
+      <DateField label="First EMI date" hint="Only if repayment has not started yet" value={firstEmi} onChange={setFirstEmi} min={start} />
       {waiting && <p className="text-xs text-neutral-500 -mt-2">Moratorium: no EMIs before this date. Interest keeps building at the loan rate and joins the balance when repayment starts. Enter the outstanding your bank shows, including any prepayments you made.</p>}
       {(started || loan) && (
         <AmountField label={loan ? 'Correct outstanding balance (optional)' : 'Outstanding today (from your bank app)'} value={balance} onChange={setBalance} hint={loan ? `Tracked: ${inr(loan.balance)} as of ${loan.balanceAsOf}` : 'Leave empty to calculate it from the EMIs since the start date.'} />
