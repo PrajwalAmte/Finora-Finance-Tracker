@@ -1,10 +1,12 @@
-import { today, type ISODate } from './dates';
-import { live, upsertMany } from './records';
+import { addDays, monthlyOccurrences, today, type ISODate } from './dates';
+import { create, live, upsertMany } from './records';
+import { dec } from './money';
+import { SELF_OWNER_ID } from '../vault/schema';
 import { catchUpLoan } from './loans';
 import { catchUpSip } from './sips';
 import { computePositions } from './portfolio';
 import { snapshotFor } from './networth';
-import type { Loan, LoanEvent, Sip, Txn, VaultData } from './types';
+import type { Entry, Loan, LoanEvent, Sip, Txn, VaultData } from './types';
 
 export interface CatchUpReport {
   emisApplied: number;
@@ -56,6 +58,29 @@ export function catchUp(data: VaultData, asOf: ISODate = today()): { data: Vault
       txns: upsertMany(data.txns, txns),
     };
   }
+
+  // Salary and bills that came due since the rule was created become real entries, so Spend and
+  // Home show them. Ids are deterministic, and a deleted entry is never brought back.
+  const known = new Set(next.entries.map(e => e.id));
+  const entries: Entry[] = [];
+  for (const r of live(next.recurring)) {
+    if (!r.active) continue;
+    const from = r.createdAt.slice(0, 10);
+    const month = (d: ISODate) => d.slice(0, 7);
+    for (const date of monthlyOccurrences(r.dayOfMonth, addDays(from, -1), asOf)) {
+      const id = `rec-${r.id}-${date}`;
+      if (known.has(id)) continue;
+      const kind = r.kind;
+      // The user already logged this one by hand this month.
+      const logged = live(next.entries).some(e => e.kind === kind && e.category === r.category && month(e.date) === month(date) && !e.recurringId);
+      if (logged) continue;
+      entries.push({
+        ...create<Entry>({ ownerId: SELF_OWNER_ID, kind, date, amount: dec(r.amount), description: r.name, category: r.category, paymentMethod: next.settings.paymentMethods[0] ?? 'Bank', source: 'RECURRING', recurringId: r.id }),
+        id,
+      });
+    }
+  }
+  if (entries.length) next = { ...next, entries: upsertMany(next.entries, entries) };
 
   const hasSnapshot = data.snapshots.some(s => s.date === asOf && !s.deletedAt);
   const hasData = live(next.holdings).length > 0 || live(next.loans).length > 0;
