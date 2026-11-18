@@ -64,6 +64,7 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+.claude
 # Certificates
 *.cer
 *.pem

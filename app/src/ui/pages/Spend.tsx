@@ -35,6 +35,12 @@ export default function SpendPage() {
   const monthEntries = useMemo(() => live(data.entries).filter(e => monthKey(e.date) === month), [data.entries, month]);
   const spent = monthEntries.filter(e => e.kind === 'EXPENSE').reduce((s, e) => s.plus(D(e.amount)), ZERO);
   const income = monthEntries.filter(e => e.kind === 'INCOME').reduce((s, e) => s.plus(D(e.amount)), ZERO);
+  // SIP instalments leave the bank account too: they are not spending, but they reduce what is left.
+  const invested = useMemo(
+    () => live(data.txns).filter(t => t.sipId && t.kind === 'BUY' && monthKey(t.date) === month).reduce((s, t) => s.plus(D(t.amount)), ZERO),
+    [data.txns, month],
+  );
+  const left = income.minus(spent).minus(invested);
   const byCategory = useMemo(() => {
     const m = new Map<string, number>();
     for (const e of monthEntries) if (e.kind === 'EXPENSE') m.set(e.category, (m.get(e.category) ?? 0) + D(e.amount).toNumber());
@@ -84,8 +90,9 @@ export default function SpendPage() {
         <div className="grid grid-cols-3 gap-3">
           <Stat label="Spent" value={<Money value={spent} short />} sub={lastSpent.gt(0) ? <span className={tone(lastSpent.minus(spent))}>{spent.gt(lastSpent) ? '▲' : '▼'} {Math.abs(Math.round(spent.div(lastSpent).minus(1).times(100).toNumber()))}% vs last month</span> : undefined} />
           <Stat label="Income" value={<Money value={income} short />} />
-          <Stat label="Saved" value={<Money value={income.minus(spent)} short className={tone(income.minus(spent))} />} />
+          <Stat label="Left" value={<Money value={left} short className={tone(left)} />} />
         </div>
+        {invested.gt(0) && <p className="text-xs text-neutral-500 mt-3">Left = income − spent − <Money value={invested} short /> invested through SIPs.</p>}
         {byCategory.length > 0 && <PieChart className="mt-4" data={byCategory.map(([name, value]) => ({ name, value }))} height={170} hideValues={hidden} />}
       </Panel>
 
